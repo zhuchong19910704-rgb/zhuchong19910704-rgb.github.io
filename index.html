@@ -220,6 +220,8 @@
   footer{margin-top:64px; border-top:1px solid var(--line); padding-top:26px;
     color:var(--dim2); font-size:12.5px; line-height:1.85; text-align:center}
   footer .brand{font-family:var(--mono); letter-spacing:.3em; color:var(--dim); margin-top:16px; font-size:12px}
+  footer .visit{margin-top:14px; font-family:var(--mono); font-size:12px; color:var(--dim2); letter-spacing:.08em}
+  footer .visit span{color:var(--dim)}
 
   /* ---- support popup ---- */
   #kfBtn{position:fixed; right:20px; bottom:20px; z-index:90; width:58px; height:58px; border-radius:50%;
@@ -498,6 +500,7 @@
 
   <footer>
     免责声明：本模块为第三方开源硬件方案，与 Tesla, Inc. 无关。安装涉及车辆 CAN 总线操作，风险自担；部分功能需要车辆已订阅 EAP/FSD 才能生效，本模块不提供任何付费功能的破解。使用时请遵守当地法律法规，驾驶员监控相关功能请谨慎评估后再开启。特别提示：整车尚在特斯拉基本保修期内（4 年或 8 万公里，以先到为准）的车主，建议暂缓安装，出保后再使用。
+    <div class="visit">本站访客 <span id="busuanzi_value_site_uv">–</span> 人 · 浏览 <span id="busuanzi_value_site_pv">–</span> 次</div>
     <div class="brand">888AI.ME</div>
   </footer>
 </div>
@@ -653,5 +656,6 @@
     });
   });
 </script>
+<script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 </body>
 </html>
