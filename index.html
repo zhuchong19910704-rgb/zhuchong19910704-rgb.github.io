@@ -1,161 +1,249 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>P4-CAN 固件下载 · 888ai.me</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P4-CAN 车载扩展模块 · 固件下载与组装套件 — 888ai.me</title>
+<meta name="description" content="P4-CAN Universal Unlock 中文版固件免费下载，永久免费 OTA 升级；组装套件 ¥399 起，适配特斯拉 Model 3 / Y，车机 ≥ 2026.20。">
 <style>
   :root{
-    --bg:#05070d; --panel:rgba(16,22,34,.78); --line:rgba(94,234,212,.16);
-    --txt:#e8eef6; --dim:#93a3b8; --cyan:#22d3ee; --teal:#2dd4bf; --red:#ff3b30;
-    --amber:#f5b83d; --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    --bg:#04060a; --panel:rgba(255,255,255,.03); --line:rgba(148,184,220,.14);
+    --txt:#eef3f9; --dim:#93a3b8; --dim2:#67788e;
+    --cyan:#22d3ee; --teal:#2dd4bf; --amber:#f5b83d; --red:#ff6b61; --green:#4ade80;
+    --mono:"SF Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0}
-  body{
-    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
-    background:var(--bg); color:var(--txt); min-height:100vh; overflow-x:hidden;
-  }
-  /* ---- tech background layers ---- */
+  html{scroll-behavior:smooth}
+  body{margin:0; background:var(--bg); color:var(--txt);
+    font-family:-apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden}
+  ::selection{background:rgba(34,211,238,.35)}
+  section{scroll-margin-top:92px}
+
+  /* ambient background */
   .bgfx{position:fixed; inset:0; z-index:-2;
     background:
-      radial-gradient(900px 480px at 12% -6%, rgba(34,211,238,.20), transparent 60%),
-      radial-gradient(820px 520px at 96% 108%, rgba(255,59,48,.13), transparent 60%),
-      radial-gradient(600px 380px at 88% 8%, rgba(45,212,191,.10), transparent 60%),
-      var(--bg);
-  }
-  .grid{position:fixed; inset:-60px; z-index:-1; pointer-events:none;
+      radial-gradient(900px 480px at 85% -5%, rgba(255,77,64,.10), transparent 60%),
+      radial-gradient(1000px 560px at 8% 0%, rgba(34,211,238,.13), transparent 60%),
+      radial-gradient(800px 500px at 50% 115%, rgba(45,212,191,.07), transparent 60%),
+      var(--bg)}
+  .gridfx{position:fixed; inset:0; z-index:-1; pointer-events:none; opacity:.5;
     background:
-      linear-gradient(rgba(56,189,248,.055) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(56,189,248,.055) 1px, transparent 1px);
-    background-size:44px 44px;
-    -webkit-mask-image:radial-gradient(ellipse 90% 70% at 50% 0%, #000 30%, transparent 78%);
-            mask-image:radial-gradient(ellipse 90% 70% at 50% 0%, #000 30%, transparent 78%);
-    animation:drift 14s linear infinite;
-  }
-  @keyframes drift{from{background-position:0 0,0 0}to{background-position:0 44px,44px 0}}
-  @media (prefers-reduced-motion: reduce){ .grid{animation:none} .dot{animation:none} }
+      linear-gradient(rgba(120,170,220,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120,170,220,.05) 1px, transparent 1px);
+    background-size:56px 56px;
+    -webkit-mask-image:radial-gradient(75% 55% at 50% 0%, #000 30%, transparent 100%);
+            mask-image:radial-gradient(75% 55% at 50% 0%, #000 30%, transparent 100%)}
 
-  .wrap{max-width:820px; margin:0 auto; padding:44px 18px 56px}
-  html{scroll-behavior:smooth}
-  ::selection{background:rgba(34,211,238,.35)}
-  .card{scroll-margin-top:84px; transition:border-color .2s ease}
-  .card:hover{border-color:rgba(34,211,238,.32)}
-  .tier{transition:border-color .2s ease, background .2s ease, transform .2s ease}
-  .tier:hover{border-color:rgba(34,211,238,.45); background:rgba(34,211,238,.05); transform:translateY(-1px)}
+  .wrap{max-width:1060px; margin:0 auto; padding:0 20px 70px}
 
-  /* ---- top nav ---- */
-  .topnav{position:sticky; top:10px; z-index:40; display:flex; gap:6px; flex-wrap:wrap; align-items:center;
-    background:rgba(8,12,20,.85); border:1px solid rgba(148,184,220,.16); border-radius:999px;
-    padding:6px; margin:0 0 26px; backdrop-filter:blur(12px); box-shadow:0 10px 30px rgba(0,0,0,.4)}
-  .topnav a{color:var(--dim); text-decoration:none; font-size:13.5px; padding:7px 13px; border-radius:999px; transition:all .15s ease}
-  .topnav a:hover{color:#031018; background:linear-gradient(92deg, var(--cyan), var(--teal)); font-weight:700}
-  .topnav .brand{font-family:var(--mono); letter-spacing:.22em; color:var(--txt); padding:7px 8px 7px 14px; font-size:12.5px}
-
-  /* ---- selling strip ---- */
-  .strip{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:18px 0 2px}
-  .strip .s{background:rgba(255,255,255,.03); border:1px solid rgba(148,184,220,.14); border-radius:12px; padding:13px 14px}
-  .strip .s b{display:block; font-size:15px; margin-bottom:3px}
-  .strip .s span{color:var(--dim); font-size:12.5px; line-height:1.55; display:block}
-  .chip.ota{border-color:rgba(245,184,61,.55); color:#ffd97a; background:rgba(245,184,61,.09)}
+  /* ---- nav ---- */
+  .nav{position:sticky; top:12px; z-index:50; display:flex; align-items:center; gap:4px;
+    background:rgba(7,11,18,.78); border:1px solid var(--line); border-radius:999px;
+    padding:7px 8px; margin:14px 0 0; backdrop-filter:blur(14px); box-shadow:0 14px 40px rgba(0,0,0,.45)}
+  .nav .logo{font-family:var(--mono); font-weight:700; letter-spacing:.18em; font-size:13.5px;
+    padding:8px 12px 8px 16px; white-space:nowrap}
+  .nav .logo i{font-style:normal; color:var(--cyan)}
+  .nav a.nl{color:var(--dim); text-decoration:none; font-size:14px; padding:8px 13px; border-radius:999px; transition:all .15s}
+  .nav a.nl:hover{color:var(--txt); background:rgba(255,255,255,.06)}
+  .nav .sp{flex:1}
+  .nav .cta{border:none; cursor:pointer; font-family:inherit; font-size:14px; font-weight:700;
+    color:#031018; background:linear-gradient(92deg, var(--cyan), var(--teal));
+    padding:9px 18px; border-radius:999px; transition:filter .15s}
+  .nav .cta:hover{filter:brightness(1.1)}
+  @media (max-width:720px){ .nav a.nl{display:none} .nav a.nl.keep{display:block} }
 
   /* ---- hero ---- */
-  .kicker{font-family:var(--mono); font-size:12px; letter-spacing:.32em; color:var(--teal); text-transform:uppercase; margin:0 0 10px}
-  h1{font-size:clamp(44px,9vw,72px); line-height:1.04; margin:0; font-weight:800; letter-spacing:.01em;
-     background:linear-gradient(92deg,#fff 20%, var(--cyan) 55%, var(--teal) 80%);
-     -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
-     filter:drop-shadow(0 0 22px rgba(34,211,238,.25));}
-  .hero-sub{color:var(--dim); font-size:16px; margin:14px 0 0; line-height:1.7}
-  .hero-sub strong{color:var(--txt)}
-  .chips{display:flex; flex-wrap:wrap; gap:8px; margin:20px 0 6px}
-  .chip{font-family:var(--mono); font-size:12.5px; color:var(--txt);
-        border:1px solid var(--line); background:rgba(34,211,238,.06);
-        padding:6px 12px; border-radius:999px; backdrop-filter:blur(6px)}
-  .chip.ver{border-color:rgba(63,185,80,.45); color:#7ee2a0; background:rgba(63,185,80,.08)}
-  .dot{display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fb950; margin-right:7px;
-       box-shadow:0 0 10px #3fb950; animation:pulse 1.8s ease-in-out infinite; vertical-align:1px}
+  .hero{text-align:center; padding:84px 0 10px}
+  .pill{display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--dim);
+    border:1px solid var(--line); background:rgba(255,255,255,.03); border-radius:999px; padding:7px 15px}
+  .pill .dot{width:7px; height:7px; border-radius:50%; background:var(--green);
+    box-shadow:0 0 10px var(--green); animation:pulse 2.2s infinite}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .pill b{color:var(--txt); font-weight:600}
+  h1{font-size:clamp(42px, 7.2vw, 76px); line-height:1.12; margin:26px 0 0; font-weight:800; letter-spacing:.01em}
+  h1 .grad{background:linear-gradient(94deg, #7dd3fc 0%, var(--cyan) 40%, var(--teal) 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent}
+  .hero-sub{color:var(--dim); font-size:clamp(15.5px, 2.2vw, 18.5px); line-height:1.75;
+    max-width:640px; margin:22px auto 0}
+  .hero-sub strong{color:var(--txt)}
+  .hero-sub .gold{color:var(--amber); font-weight:700}
+  .hero-cta{display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:32px}
+  .btn{display:inline-block; text-decoration:none; font-size:16px; font-weight:700; border-radius:999px;
+    padding:14px 30px; transition:all .15s; cursor:pointer; font-family:inherit}
+  .btn.pri{color:#031018; background:linear-gradient(92deg, var(--cyan), var(--teal));
+    box-shadow:0 12px 34px rgba(34,211,238,.28)}
+  .btn.pri:hover{filter:brightness(1.1); transform:translateY(-1px)}
+  .btn.gho{color:var(--txt); background:rgba(255,255,255,.04); border:1px solid var(--line)}
+  .btn.gho:hover{border-color:rgba(34,211,238,.5)}
+  .hero-meta{margin-top:20px; font-size:13px; color:var(--dim2); font-family:var(--mono); letter-spacing:.06em}
 
-  /* ---- cards ---- */
-  .card{position:relative; background:var(--panel); border:1px solid rgba(148,184,220,.14);
-        border-radius:16px; padding:22px 22px 18px; margin:20px 0;
-        backdrop-filter:blur(10px); box-shadow:0 18px 44px rgba(0,0,0,.45)}
-  .card::before{content:""; position:absolute; top:0; left:22px; right:22px; height:1px;
-        background:linear-gradient(90deg, transparent, rgba(34,211,238,.55), transparent)}
-  .card h2{font-size:19px; margin:0 0 12px; display:flex; align-items:center; gap:10px}
-  .card h2 .tag{font-family:var(--mono); font-size:11px; letter-spacing:.14em; color:var(--cyan);
-        border:1px solid rgba(34,211,238,.4); padding:3px 8px; border-radius:6px; font-weight:400}
-  .card p{line-height:1.75; color:#c6d2e0; margin:8px 0}
-  .card p strong{color:#fff}
-  .warn{border-color:rgba(245,184,61,.45); box-shadow:0 0 0 1px rgba(245,184,61,.12), 0 18px 44px rgba(0,0,0,.45)}
-  .warn::before{background:linear-gradient(90deg, transparent, rgba(245,184,61,.7), transparent)}
-  .warn h2{color:var(--amber)}
+  /* ---- dashboard mock ---- */
+  .mock{max-width:860px; margin:52px auto 0; text-align:left; border-radius:20px; overflow:hidden;
+    background:linear-gradient(180deg, rgba(16,24,38,.92), rgba(8,12,20,.94));
+    border:1px solid rgba(148,184,220,.2);
+    box-shadow:0 40px 90px rgba(0,0,0,.55), 0 0 90px rgba(34,211,238,.07)}
+  .mock-bar{display:flex; align-items:center; gap:7px; padding:13px 16px;
+    border-bottom:1px solid var(--line); background:rgba(255,255,255,.02)}
+  .mock-bar .d{width:11px; height:11px; border-radius:50%}
+  .mock-bar .t{margin-left:10px; font-family:var(--mono); font-size:12.5px; color:var(--dim); letter-spacing:.08em}
+  .mock-bar .live{margin-left:auto; font-size:11.5px; color:var(--green); font-family:var(--mono)}
+  .mock-grid{display:grid; grid-template-columns:1.5fr 1fr; gap:0}
+  @media (max-width:720px){ .mock-grid{grid-template-columns:1fr} }
+  .mock-main{padding:18px 20px 20px}
+  .mock-side{padding:18px 20px 20px; border-left:1px solid var(--line); background:rgba(255,255,255,.015)}
+  @media (max-width:720px){ .mock-side{border-left:none; border-top:1px solid var(--line)} }
+  .mock h4{margin:0 0 12px; font-size:12px; font-family:var(--mono); letter-spacing:.18em; color:var(--dim2); font-weight:600}
+  .tgl{display:flex; align-items:center; justify-content:space-between; padding:11px 2px;
+    border-bottom:1px dashed rgba(148,184,220,.1); font-size:15px}
+  .tgl:last-child{border-bottom:none}
+  .tgl small{display:block; color:var(--dim2); font-size:12px; margin-top:2px}
+  .sw{width:44px; height:25px; border-radius:999px; background:rgba(255,255,255,.12); position:relative; flex:none}
+  .sw::after{content:""; position:absolute; top:3px; left:3px; width:19px; height:19px; border-radius:50%; background:#aeb9c6; transition:all .2s}
+  .sw.on{background:linear-gradient(92deg, var(--cyan), var(--teal))}
+  .sw.on::after{left:22px; background:#fff}
+  .stat-row{display:flex; justify-content:space-between; padding:9px 2px; font-size:13.5px;
+    border-bottom:1px dashed rgba(148,184,220,.1)}
+  .stat-row:last-child{border-bottom:none}
+  .stat-row .k{color:var(--dim)}
+  .stat-row .v{font-family:var(--mono); font-size:12.5px}
+  .ok{color:var(--green)}
 
-  /* ---- downloads ---- */
-  .dl{display:flex; align-items:center; justify-content:space-between; gap:12px;
-      text-decoration:none; color:#031018; font-weight:700; font-size:16.5px;
-      background:linear-gradient(92deg, var(--cyan), var(--teal));
-      padding:15px 18px; border-radius:12px; margin:14px 0 8px;
-      box-shadow:0 8px 28px rgba(34,211,238,.35); transition:transform .15s ease, box-shadow .15s ease}
-  .dl:hover{transform:translateY(-2px); box-shadow:0 14px 34px rgba(34,211,238,.5)}
-  .dl .size{font-family:var(--mono); font-weight:400; font-size:13px; opacity:.75}
-  .dl.ota{background:rgba(45,212,191,.07); color:var(--teal); border:1px solid rgba(45,212,191,.55);
-      box-shadow:none}
-  .dl.ota:hover{background:rgba(45,212,191,.14); box-shadow:0 10px 26px rgba(45,212,191,.18)}
-  .hash{display:flex; align-items:center; gap:8px; background:rgba(0,0,0,.42);
-        border:1px solid rgba(148,184,220,.16); border-radius:8px; padding:7px 10px; margin:0 0 6px}
-  .hash .lbl{font-family:var(--mono); font-size:11px; color:var(--dim); letter-spacing:.08em; white-space:nowrap}
-  .hash code{font-family:var(--mono); font-size:11.5px; color:#9fd8e8; word-break:break-all; flex:1}
-  .copy{flex:none; font-family:var(--mono); font-size:11px; color:var(--cyan); background:transparent;
-        border:1px solid rgba(34,211,238,.45); border-radius:6px; padding:4px 9px; cursor:pointer}
-  .copy:hover{background:rgba(34,211,238,.12)}
-  .howto{font-size:14px; color:var(--dim)}
+  /* ---- stats band ---- */
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; max-width:860px; margin:26px auto 0}
+  @media (max-width:720px){ .stats{grid-template-columns:repeat(2,1fr)} }
+  .stats .st{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px 16px; text-align:center}
+  .stats .n{font-size:25px; font-weight:800}
+  .stats .n em{font-style:normal; color:var(--amber)}
+  .stats .l{color:var(--dim); font-size:12.5px; margin-top:4px}
+
+  /* ---- sections ---- */
+  .sec{padding:74px 0 0}
+  .sec-label{font-family:var(--mono); font-size:12px; letter-spacing:.24em; color:var(--teal); text-align:center}
+  .sec-title{font-size:clamp(28px, 4.4vw, 40px); font-weight:800; text-align:center; margin:12px 0 0; line-height:1.3}
+  .sec-sub{color:var(--dim); text-align:center; max-width:620px; margin:14px auto 0; line-height:1.75; font-size:15.5px}
+  .sec-sub strong{color:var(--txt)}
+
+  /* ---- bento ---- */
+  .bento{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:36px}
+  @media (max-width:860px){ .bento{grid-template-columns:1fr} }
+  .b{background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:24px 22px;
+    transition:border-color .2s, transform .2s}
+  .b:hover{border-color:rgba(34,211,238,.35); transform:translateY(-2px)}
+  .b .ic{font-size:22px}
+  .b h3{margin:12px 0 4px; font-size:19px}
+  .b .tagline{color:var(--dim); font-size:13px; margin:0 0 12px}
+  .b ul{margin:0; padding:0; list-style:none}
+  .b li{padding:6px 0 6px 20px; position:relative; font-size:14.5px; color:#c9d6e4; border-bottom:1px dashed rgba(148,184,220,.08)}
+  .b li:last-child{border-bottom:none}
+  .b li::before{content:""; position:absolute; left:2px; top:13px; width:7px; height:7px; border-radius:2px;
+    background:linear-gradient(135deg, var(--cyan), var(--teal))}
+  .b p{color:var(--dim); font-size:14.5px; line-height:1.75; margin:8px 0 0}
+  .b p strong{color:var(--txt)}
+  .b.gold{border-color:rgba(245,184,61,.4); background:linear-gradient(180deg, rgba(245,184,61,.07), rgba(245,184,61,.015))}
+  .b.gold h3{color:#ffd97a}
+  .b .more{color:var(--dim2); font-size:13px; padding-top:8px}
+
+  /* ---- status cards (version) ---- */
+  .vgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:36px}
+  @media (max-width:860px){ .vgrid{grid-template-columns:1fr} }
+  .v{border-radius:20px; padding:24px 22px; border:1px solid var(--line); background:var(--panel)}
+  .v .badge{display:inline-block; font-size:12px; font-weight:700; padding:5px 11px; border-radius:999px; margin-bottom:12px}
+  .v h3{margin:0 0 8px; font-size:19px}
+  .v p{color:var(--dim); font-size:14.5px; line-height:1.75; margin:0}
+  .v p strong{color:var(--txt)}
+  .v.no{border-color:rgba(255,107,97,.4)} .v.no .badge{background:rgba(255,107,97,.14); color:#ff9d97}
+  .v.yes{border-color:rgba(74,222,128,.35)} .v.yes .badge{background:rgba(74,222,128,.12); color:#7ee2a0}
+  .v.mid .badge{background:rgba(245,184,61,.12); color:#ffd97a}
+
+  /* ---- download cards ---- */
+  .dlgrid{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:36px}
+  @media (max-width:860px){ .dlgrid{grid-template-columns:1fr} }
+  .dlc{background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:26px 24px}
+  .dlc.ota{border-color:rgba(245,184,61,.35)}
+  .dlc .tag{font-family:var(--mono); font-size:11px; letter-spacing:.2em; color:var(--teal)}
+  .dlc.ota .tag{color:var(--amber)}
+  .dlc h3{margin:10px 0 6px; font-size:21px}
+  .dlc .dsub{color:var(--dim); font-size:14px; line-height:1.7; margin:0 0 16px}
+  a.dl{display:flex; align-items:center; justify-content:space-between; gap:10px; text-decoration:none;
+    color:var(--txt); font-weight:700; font-size:15.5px; border-radius:13px; padding:15px 17px; margin:10px 0 0;
+    background:linear-gradient(92deg, rgba(34,211,238,.2), rgba(45,212,191,.14));
+    border:1px solid rgba(34,211,238,.45); transition:all .15s}
+  a.dl:hover{filter:brightness(1.25); transform:translateY(-1px)}
+  a.dl.ota{background:rgba(255,255,255,.03); border:1px solid rgba(245,184,61,.45)}
+  a.dl .size{font-family:var(--mono); font-size:12px; color:var(--dim); font-weight:400; white-space:nowrap}
+  .hash{display:flex; align-items:center; gap:8px; margin:8px 0 4px; padding:9px 11px;
+    background:rgba(0,0,0,.45); border:1px solid rgba(148,184,220,.12); border-radius:9px}
+  .hash .lbl{font-family:var(--mono); font-size:10px; letter-spacing:.12em; color:var(--dim2); flex:none}
+  .hash code{font-family:var(--mono); font-size:10.5px; color:#9fb2c8; word-break:break-all; line-height:1.5}
+  .copy{flex:none; background:rgba(34,211,238,.12); color:var(--cyan); border:1px solid rgba(34,211,238,.4);
+    border-radius:7px; padding:5px 10px; font-size:12px; cursor:pointer; font-family:inherit}
+  .copy:hover{background:rgba(34,211,238,.22)}
+  .howto{color:var(--dim); font-size:13.5px; line-height:1.75; margin:16px 0 0}
+  .warnbar{margin-top:36px; border:1px solid rgba(255,107,97,.45); background:rgba(255,107,97,.06);
+    border-radius:16px; padding:18px 22px; font-size:14.5px; line-height:1.8; color:#e8c9c6}
+  .warnbar strong{color:#ffb3ad}
 
   /* ---- pricing ---- */
-  .price-group{margin:16px 0 4px; font-family:var(--mono); font-size:12px; letter-spacing:.14em; color:var(--teal)}
-  .tier{display:flex; align-items:center; justify-content:space-between; gap:12px;
-        border:1px solid rgba(148,184,220,.14); border-radius:12px; padding:13px 15px; margin:9px 0;
-        background:rgba(255,255,255,.03)}
-  .tier .t-name{font-weight:700; font-size:15.5px}
-  .tier .t-desc{color:var(--dim); font-size:13px; margin-top:3px; line-height:1.6}
-  .tier .t-price{font-family:var(--mono); font-size:21px; font-weight:700; color:var(--cyan); white-space:nowrap}
+  .pgroup{font-family:var(--mono); font-size:12.5px; letter-spacing:.16em; color:var(--dim);
+    margin:38px 0 14px; text-align:center}
+  .tiers{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+  @media (max-width:860px){ .tiers{grid-template-columns:1fr} }
+  .tier{background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:26px 24px;
+    display:flex; flex-direction:column; transition:border-color .2s, transform .2s}
+  .tier:hover{border-color:rgba(34,211,238,.4); transform:translateY(-2px)}
+  .tier .tn{font-size:15px; color:var(--dim); font-weight:600}
+  .tier .tp{font-size:38px; font-weight:800; margin:10px 0 2px}
+  .tier .tp small{font-size:14px; color:var(--dim2); font-weight:400}
+  .tier .td{color:var(--dim); font-size:14px; line-height:1.75; margin:10px 0 20px; flex:1}
+  .tier .buy{border:1px solid rgba(34,211,238,.5); background:rgba(34,211,238,.08); color:var(--txt);
+    font-family:inherit; font-size:15px; font-weight:700; border-radius:999px; padding:12px; cursor:pointer; transition:all .15s}
+  .tier .buy:hover{background:linear-gradient(92deg, var(--cyan), var(--teal)); color:#031018}
+  .pnote{text-align:center; color:var(--dim); font-size:13.5px; margin-top:22px; line-height:1.8}
+  .pnote .gold{color:var(--amber); font-weight:700}
 
-  /* ---- table ---- */
-  table{border-collapse:collapse; width:100%; font-size:14px; margin-top:6px}
-  th,td{border:1px solid rgba(148,184,220,.14); padding:9px 11px; text-align:left; line-height:1.65; vertical-align:top}
-  th{background:rgba(34,211,238,.08); color:var(--txt); font-family:var(--mono); font-weight:600; font-size:12.5px; letter-spacing:.06em; white-space:nowrap}
-  td{color:#c6d2e0}
-  td:first-child{color:var(--txt); font-weight:600; white-space:nowrap}
-  .mono{font-family:var(--mono); font-size:12.5px; color:#9fd8e8}
+  /* ---- table card ---- */
+  .tcard{background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:10px 24px; margin-top:36px}
+  table{width:100%; border-collapse:collapse; font-size:14.5px}
+  th,td{text-align:left; padding:13px 8px; border-bottom:1px solid rgba(148,184,220,.1); vertical-align:top; line-height:1.7}
+  tr:last-child td{border-bottom:none}
+  th{color:var(--dim2); font-weight:600; font-size:12.5px; letter-spacing:.08em; white-space:nowrap; width:110px}
+  td{color:#c9d6e4}
+  .mono{font-family:var(--mono); font-size:12.5px}
 
-  a{color:var(--cyan)}
-  footer{color:#66788e; font-size:12.5px; margin-top:34px; line-height:1.85;
-         border-top:1px solid rgba(148,184,220,.12); padding-top:18px}
-  footer .brand{font-family:var(--mono); letter-spacing:.28em; color:var(--dim); margin-top:10px}
+  .oscard{background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:26px 24px; margin-top:36px}
+  .oscard h3{margin:0 0 10px; font-size:19px}
+  .oscard p{color:var(--dim); font-size:14.5px; line-height:1.8; margin:0}
+  .oscard a{color:var(--cyan)}
+  .oscard strong{color:var(--txt)}
+
+  footer{margin-top:64px; border-top:1px solid var(--line); padding-top:26px;
+    color:var(--dim2); font-size:12.5px; line-height:1.85; text-align:center}
+  footer .brand{font-family:var(--mono); letter-spacing:.3em; color:var(--dim); margin-top:16px; font-size:12px}
 
   /* ---- support popup ---- */
-  #kfBtn{position:fixed; right:20px; bottom:20px; z-index:60; width:60px; height:60px; border-radius:50%;
-    border:1px solid rgba(34,211,238,.55); cursor:pointer; color:#fff;
-    background:linear-gradient(135deg, rgba(34,211,238,.9), rgba(255,59,48,.85));
-    box-shadow:0 12px 32px rgba(34,211,238,.35); display:flex; align-items:center; justify-content:center;
-    transition:transform .15s ease}
-  #kfBtn:hover{transform:translateY(-3px) scale(1.04)}
-  #kfBtn svg{width:28px; height:28px}
-  #kfPanel{position:fixed; right:20px; bottom:92px; z-index:60; width:min(392px, calc(100vw - 32px));
-    max-height:min(76vh, 720px); overflow-y:auto; border-radius:18px; padding:0 0 16px;
-    background:rgba(10,15,24,.96); border:1px solid rgba(34,211,238,.3);
-    box-shadow:0 24px 60px rgba(0,0,0,.6); backdrop-filter:blur(12px);
+  #kfBtn{position:fixed; right:20px; bottom:20px; z-index:90; width:58px; height:58px; border-radius:50%;
+    border:1px solid rgba(34,211,238,.55); cursor:pointer; color:#031018;
+    background:linear-gradient(135deg, var(--cyan), var(--teal));
+    box-shadow:0 14px 34px rgba(34,211,238,.35); display:flex; align-items:center; justify-content:center; transition:transform .15s}
+  #kfBtn:hover{transform:scale(1.06)}
+  #kfBtn svg{width:27px; height:27px}
+  #kfPanel{position:fixed; right:20px; bottom:88px; z-index:91; width:min(392px, calc(100vw - 32px));
+    max-height:min(78vh, 720px); overflow-y:auto; border-radius:20px;
+    background:rgba(9,14,22,.97); border:1px solid rgba(148,184,220,.25);
+    box-shadow:0 30px 70px rgba(0,0,0,.6); backdrop-filter:blur(16px);
     opacity:0; transform:translateY(14px) scale(.98); pointer-events:none; transition:all .22s ease}
   #kfPanel.open{opacity:1; transform:none; pointer-events:auto}
-  .kf-head{position:sticky; top:0; padding:16px 18px 12px; background:rgba(10,15,24,.98);
-    border-bottom:1px solid rgba(148,184,220,.14); border-radius:18px 18px 0 0}
+  .kf-head{position:sticky; top:0; padding:17px 19px 13px; background:rgba(9,14,22,.98);
+    border-bottom:1px solid var(--line); border-radius:20px 20px 0 0}
   .kf-head h3{margin:0; font-size:17px; display:flex; align-items:center; gap:8px}
+  .kf-head h3 .dot{width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 9px var(--green)}
   .kf-head p{margin:6px 0 0; font-size:12.5px; color:var(--dim); line-height:1.6}
   .kf-x{position:absolute; right:12px; top:12px; background:none; border:none; color:var(--dim);
-    font-size:20px; cursor:pointer; line-height:1}
-  .kf-body{padding:6px 18px 0}
-  .kf-sec{font-family:var(--mono); font-size:11px; letter-spacing:.18em; color:var(--teal); margin:14px 0 8px}
-  details.kf-q{border:1px solid rgba(148,184,220,.14); border-radius:10px; margin:8px 0; background:rgba(255,255,255,.03)}
+    font-size:21px; cursor:pointer; line-height:1}
+  .kf-body{padding:6px 19px 16px}
+  .kf-sec{font-family:var(--mono); font-size:11px; letter-spacing:.18em; color:var(--teal); margin:15px 0 8px}
+  details.kf-q{border:1px solid var(--line); border-radius:11px; margin:8px 0; background:rgba(255,255,255,.03)}
   details.kf-q summary{cursor:pointer; padding:11px 13px; font-size:14px; font-weight:600; list-style:none}
   details.kf-q summary::-webkit-details-marker{display:none}
   details.kf-q summary::after{content:"+"; float:right; color:var(--cyan); font-family:var(--mono)}
@@ -176,109 +264,232 @@
 </head>
 <body>
 <div class="bgfx"></div>
-<div class="grid"></div>
+<div class="gridfx"></div>
 <div class="wrap">
 
-  <nav class="topnav">
-    <span class="brand">888AI.ME</span>
-    <a href="#version">车机版本</a>
-    <a href="#download">固件下载</a>
-    <a href="#price">套件价格</a>
-    <a href="#wiring">接线要点</a>
+  <nav class="nav">
+    <span class="logo">888<i>AI</i>.ME</span>
+    <a class="nl keep" href="#features">功能</a>
+    <a class="nl" href="#version">车机版本</a>
+    <a class="nl keep" href="#download">固件下载</a>
+    <a class="nl keep" href="#price">套件价格</a>
+    <a class="nl" href="#wiring">接线要点</a>
+    <span class="sp"></span>
+    <button class="cta" id="navKf">联系客服</button>
   </nav>
 
-  <p class="kicker">P4-CAN Universal Unlock // Firmware</p>
-  <h1>P4-CAN 固件下载</h1>
-  <p class="hero-sub">ESP32-P4 车载扩展模块 · 中文版固件 · 当前版本 <strong>v3.35.3</strong>（2026-11-20 发布） · <strong>永久免费 OTA 升级</strong></p>
-  <div class="chips">
-    <span class="chip ver"><span class="dot"></span>v3.35.3 LATEST</span>
-    <span class="chip">MODEL 3 / Y</span>
-    <span class="chip">车机 ≥ 2026.20</span>
-    <span class="chip">ESP32-P4 · 32MB FLASH</span>
-    <span class="chip">GPLv3 开源</span>
-    <span class="chip">组装套件 ¥399 起</span>
-    <span class="chip ota">永久免费 OTA</span>
+  <!-- HERO -->
+  <div class="hero">
+    <span class="pill"><span class="dot"></span>固件 <b>v3.35.3</b> 已发布 · 2026-11-20</span>
+    <h1>解锁特斯拉的<br><span class="grad">隐藏功能</span></h1>
+    <p class="hero-sub">P4-CAN 车载扩展模块，基于 ESP32-P4，同时接入三条 CAN 总线。<br>
+    中文版固件免费下载，<span class="gold">永久免费 OTA 升级</span>；组装套件 <strong>¥399 起</strong>。</p>
+    <div class="hero-cta">
+      <a class="btn pri" href="#download">免费下载固件</a>
+      <a class="btn gho" href="#price">查看组装套件</a>
+    </div>
+    <p class="hero-meta">MODEL 3 / Y · 车机 ≥ 2026.20 · GPLv3 开源</p>
+
+    <div class="mock" aria-hidden="true">
+      <div class="mock-bar">
+        <span class="d" style="background:#ff5f57"></span><span class="d" style="background:#febc2e"></span><span class="d" style="background:#28c840"></span>
+        <span class="t">P4-CAN · 中文仪表盘</span>
+        <span class="live">● 已连接</span>
+      </div>
+      <div class="mock-grid">
+        <div class="mock-main">
+          <h4>功能开关</h4>
+          <div class="tgl"><span>杀手模式<small>解除脱手提醒</small></span><span class="sw on"></span></div>
+          <div class="tgl"><span>持续 AP<small>实验功能</small></span><span class="sw on"></span></div>
+          <div class="tgl"><span>实验变道<small>非高速场景</small></span><span class="sw on"></span></div>
+          <div class="tgl"><span>电池预热<small>Beta</small></span><span class="sw"></span></div>
+        </div>
+        <div class="mock-side">
+          <h4>模块状态</h4>
+          <div class="stat-row"><span class="k">CAN 1 · BODY</span><span class="v ok">已连接</span></div>
+          <div class="stat-row"><span class="k">CAN 2 · CHASSIS</span><span class="v ok">已连接</span></div>
+          <div class="stat-row"><span class="k">CAN 3 · PARTY</span><span class="v ok">已连接</span></div>
+          <div class="stat-row"><span class="k">固件版本</span><span class="v">v3.35.3 最新</span></div>
+          <div class="stat-row"><span class="k">OTA 升级</span><span class="v" style="color:var(--amber)">永久免费</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="st"><div class="n">2</div><div class="l">适配车型 · Model 3 / Y</div></div>
+      <div class="st"><div class="n">3 路</div><div class="l">CAN 总线同时接入</div></div>
+      <div class="st"><div class="n">≥2026.20</div><div class="l">车机软件版本要求</div></div>
+      <div class="st"><div class="n"><em>¥0</em></div><div class="l">OTA 升级 · 永久免费</div></div>
+    </div>
   </div>
 
-  <div class="strip">
-    <div class="s"><b>永久免费 OTA</b><span>固件更新终身免费，模块仪表盘在线升级</span></div>
-    <div class="s"><b>免破线安装</b><span>X179 诊断口对插，不改原车线路</span></div>
-    <div class="s"><b>中文仪表盘</b><span>全中文界面，功能设置一看就懂</span></div>
-    <div class="s"><b>开源可校验</b><span>GPLv3 开源发布，SHA-256 与原版对得上</span></div>
-  </div>
+  <!-- FEATURES -->
+  <section class="sec" id="features">
+    <p class="sec-label">FEATURES</p>
+    <h2 class="sec-title">没买 EAP，也能用上大半</h2>
+    <p class="sec-sub">功能按车辆已购买的订阅分三档生效。<strong>基础功能不需要任何订阅</strong>；涉及 EAP / FSD 的功能，模块只做限制解锁，不提供付费功能破解。</p>
+    <div class="bento">
+      <div class="b">
+        <div class="ic">⚡</div>
+        <h3>基础 AP 就能用</h3>
+        <p class="tagline">无需订阅 · 共 13 项</p>
+        <ul>
+          <li>杀手模式（解除脱手提醒）</li>
+          <li>持续 AP（实验）</li>
+          <li>实验变道 · 非高速场景</li>
+          <li>解除驾驶员监测</li>
+          <li>ISA 限速提示音抑制</li>
+          <li>电池预热（Beta）· 踏板映射</li>
+        </ul>
+        <p class="more">另有视觉限速、智能换挡、灯光功能、服务模式等，共 13 项。</p>
+      </div>
+      <div class="b">
+        <div class="ic">🛣️</div>
+        <h3>已购 EAP 额外解锁</h3>
+        <p class="tagline">在基础档之上 · 共 5 项</p>
+        <ul>
+          <li>召唤距离放开（±85m）</li>
+          <li>NOA 自动打转向灯</li>
+          <li>免确认变道</li>
+          <li>高级 EAP 增强</li>
+          <li>EU R79 限制解锁</li>
+        </ul>
+      </div>
+      <div class="b">
+        <div class="ic">🚦</div>
+        <h3>已购 FSD 额外解锁</h3>
+        <p class="tagline">在 EAP 档之上</p>
+        <ul>
+          <li>红绿灯识别 TLSSC 激活</li>
+          <li>FSD 地区限制解锁</li>
+          <li>FSD 可视化（实验性）</li>
+        </ul>
+        <p class="more">满血与否取决于车辆自身的 FSD 版本，与本模块无关，详见下方版本说明。</p>
+      </div>
+      <div class="b gold">
+        <div class="ic">🔄</div>
+        <h3>永久免费 OTA</h3>
+        <p>固件更新<strong>终身免费</strong>：新版本发布后，在模块仪表盘里上传 OTA 包即可升级，不收费、不设会员、不限次数。</p>
+      </div>
+      <div class="b">
+        <div class="ic">🔌</div>
+        <h3>免破线安装</h3>
+        <p>走后排 <strong>X179 诊断接头</strong>对插接入，不剪线、不改原车线路；随货附详细接线说明，装前用服务模式逐脚核对针脚。</p>
+      </div>
+      <div class="b">
+        <div class="ic">🧩</div>
+        <h3>开源可校验</h3>
+        <p>固件来自 <strong>GPLv3 开源项目</strong>，本站每个包都标注 SHA-256，可与原项目发布包逐字节核对，放心刷。</p>
+      </div>
+    </div>
+  </section>
 
-  <div class="card warn">
-    <h2>⚠ 下载前先确认两件事</h2>
-    <p>1. <strong>芯片版本</strong>：主板是 ESP32-P4 芯片，分 REV1.X 和 REV3.X 两个版本，固件包不通用。买成品的按卖家标注选；自己买板的看芯片丝印或问板卡卖家。</p>
-    <p>2. <strong>整刷包 ≠ 更新包</strong>：第一次刷机用 FULLFLASH 整刷包；以后升级<strong>只能用 OTA 包</strong>。拿整刷包当更新包刷，是已知的重启故障原因（原项目作者明确提醒过）。</p>
-  </div>
+  <!-- VERSION -->
+  <section class="sec" id="version">
+    <p class="sec-label">COMPATIBILITY</p>
+    <h2 class="sec-title">车机版本，先对号入座</h2>
+    <p class="sec-sub">买之前先在车机里看一眼软件版本——这是能不能用的唯一硬门槛。</p>
+    <div class="vgrid">
+      <div class="v no">
+        <span class="badge">不能使用</span>
+        <h3>低于 2026.20</h3>
+        <p>原项目明确说明：低于 2026.20 功能不正常。请先把车机升级到 2026.20 以上，再考虑购买和安装。</p>
+      </div>
+      <div class="v yes">
+        <span class="badge">可以使用</span>
+        <h3>2026.20 及以上</h3>
+        <p>基础 / EAP / FSD 三档功能，按车辆<strong>已购买的订阅</strong>生效（见下方价格区）。</p>
+      </div>
+      <div class="v mid">
+        <span class="badge">关于「满血 FSD」</span>
+        <h3>模块决定不了满血</h3>
+        <p>满血与否取决于车辆自身的 FSD 版本与特斯拉的推送进度（市面所称「工厂版」指保留了特定出厂软件的车辆），<strong>与本模块无关</strong>。本模块对已购 FSD 的车辆提供的是红绿灯识别激活与地区限制解锁，不提供 FSD 本体的激活，也不承诺「满血」。</p>
+      </div>
+    </div>
+  </section>
 
-  <div class="card" id="version">
-    <h2><span class="tag">VERSION</span>车机版本要求（先对号入座）</h2>
-    <table>
-      <tr><th>车机软件版本</th><th>能不能用</th></tr>
-      <tr><td>低于 2026.20</td><td><strong>不能使用。</strong>原项目明确说明：低于 2026.20 功能不正常。请先把车机升级到 2026.20 以上，再考虑购买和安装。</td></tr>
-      <tr><td>2026.20 及以上</td><td><strong>可以使用。</strong>基础 / EAP / FSD 三档功能按车辆已购买的订阅生效（见下方价格区）。</td></tr>
-      <tr><td>关于「满血 FSD」</td><td>满血与否取决于车辆自身的 FSD 版本与特斯拉的推送进度（市面所称「工厂版」指保留了特定出厂软件的车辆），<strong>与本模块无关</strong>。本模块对已购 FSD 的车辆提供的是红绿灯识别激活与地区限制解锁，不提供 FSD 本体的激活，也不承诺「满血」。</td></tr>
-    </table>
-  </div>
+  <!-- DOWNLOAD -->
+  <section class="sec" id="download">
+    <p class="sec-label">FIRMWARE</p>
+    <h2 class="sec-title">固件下载</h2>
+    <p class="sec-sub">中文版固件 v3.35.3，按主板芯片版本选包。<strong>整刷包只用于第一次刷机，升级只能用 OTA 包。</strong></p>
+    <div class="warnbar">⚠ <strong>下载前确认两件事：</strong>① 芯片版本——主板 ESP32-P4 分 REV1.X 与 REV3.X，固件包不通用（买成品按卖家标注，自己买板看芯片丝印）。② 整刷包 ≠ 更新包——拿整刷包当更新包刷，是已知的模块重启故障原因（原项目作者明确提醒过）。</div>
+    <div class="dlgrid">
+      <div class="dlc">
+        <span class="tag">FIRST FLASH</span>
+        <h3>第一次刷机 · 整刷包</h3>
+        <p class="dsub">空白主板第一次刷机用这个包，从地址 0x0 整体写入。</p>
+        <a class="dl" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.FULLFLASH.REV3.X.merged.bin"><span>⬇ REV3.X 整刷包</span><span class="size">32 MB</span></a>
+        <div class="hash"><span class="lbl">SHA-256</span><code>c67bdb11326a4cffa29bf1063bd23ef3c10e33c88be850786ebf8387d9d55ac4</code><button class="copy" data-hash="c67bdb11326a4cffa29bf1063bd23ef3c10e33c88be850786ebf8387d9d55ac4">复制</button></div>
+        <a class="dl" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.FULLFLASH.REV1.X.merged.bin"><span>⬇ REV1.X 整刷包</span><span class="size">32 MB</span></a>
+        <div class="hash"><span class="lbl">SHA-256</span><code>c25c516ba2719dcb0d432b816ea31477d8547d2527e301b22b414975b78d052d</code><button class="copy" data-hash="c25c516ba2719dcb0d432b816ea31477d8547d2527e301b22b414975b78d052d">复制</button></div>
+        <p class="howto">刷机方法：电脑 Chrome 打开 ESP 在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选择 merged 整刷包从地址 0x0 写入。</p>
+      </div>
+      <div class="dlc ota">
+        <span class="tag">OTA UPDATE · 永久免费</span>
+        <h3>后续升级 · OTA 包</h3>
+        <p class="dsub">已经装好的模块升级用这个包。本站所有后续版本 OTA 升级永久免费。</p>
+        <a class="dl ota" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.OTA.REV3.X.bin"><span>⬇ REV3.X OTA 包</span><span class="size">≈1.5 MB</span></a>
+        <div class="hash"><span class="lbl">SHA-256</span><code>284efa0ec05cb44a95d35c72a2c2b48ebae66e5fbc74edba79bb4393232f12be</code><button class="copy" data-hash="284efa0ec05cb44a95d35c72a2c2b48ebae66e5fbc74edba79bb4393232f12be">复制</button></div>
+        <a class="dl ota" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.OTA.REV1.X.bin"><span>⬇ REV1.X OTA 包</span><span class="size">≈1.5 MB</span></a>
+        <div class="hash"><span class="lbl">SHA-256</span><code>6e732b6d88d22498a9d1da63af2830d06e21f057f9aba11927f69141ea0fb930</code><button class="copy" data-hash="6e732b6d88d22498a9d1da63af2830d06e21f057f9aba11927f69141ea0fb930">复制</button></div>
+        <p class="howto">升级方法：在模块的网页仪表盘里找到固件更新入口，上传 OTA 包即可，不要断电。</p>
+      </div>
+    </div>
+  </section>
 
-  <div class="card" id="download">
-    <h2><span class="tag">FIRST FLASH</span>第一次刷机 · FULLFLASH 整刷包</h2>
-    <a class="dl" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.FULLFLASH.REV3.X.merged.bin"><span>⬇ REV3.X 整刷包</span><span class="size">32 MB</span></a>
-    <div class="hash"><span class="lbl">SHA-256</span><code>c67bdb11326a4cffa29bf1063bd23ef3c10e33c88be850786ebf8387d9d55ac4</code><button class="copy" data-hash="c67bdb11326a4cffa29bf1063bd23ef3c10e33c88be850786ebf8387d9d55ac4">复制</button></div>
-    <a class="dl" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.FULLFLASH.REV1.X.merged.bin"><span>⬇ REV1.X 整刷包</span><span class="size">32 MB</span></a>
-    <div class="hash"><span class="lbl">SHA-256</span><code>c25c516ba2719dcb0d432b816ea31477d8547d2527e301b22b414975b78d052d</code><button class="copy" data-hash="c25c516ba2719dcb0d432b816ea31477d8547d2527e301b22b414975b78d052d">复制</button></div>
-    <p class="howto">刷机方法：电脑 Chrome 打开 ESP 在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选择 merged 整刷包从地址 0x0 写入。</p>
-  </div>
+  <!-- PRICE -->
+  <section class="sec" id="price">
+    <p class="sec-label">PRICING</p>
+    <h2 class="sec-title">组装套件</h2>
+    <p class="sec-sub">组装好的<strong>空白硬件套件</strong>：ESP32-P4 主板 + 3× SN65HVD230 CAN 模块 + X179 免破线线束 + 降压模块，全部组装好发货。模块不预装固件，到手在本页免费下载自刷，<strong>后续 OTA 更新永久免费</strong>。硬件是同一套，按车的订阅选档，差别在能解锁的功能。前提：车机软件 ≥ 2026.20。</p>
 
-  <div class="card">
-    <h2><span class="tag">OTA UPDATE</span>后续升级 · OTA 包（永久免费）</h2>
-    <a class="dl ota" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.OTA.REV3.X.bin"><span>⬇ REV3.X OTA 包</span><span class="size">≈1.5 MB</span></a>
-    <div class="hash"><span class="lbl">SHA-256</span><code>284efa0ec05cb44a95d35c72a2c2b48ebae66e5fbc74edba79bb4393232f12be</code><button class="copy" data-hash="284efa0ec05cb44a95d35c72a2c2b48ebae66e5fbc74edba79bb4393232f12be">复制</button></div>
-    <a class="dl ota" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.OTA.REV1.X.bin"><span>⬇ REV1.X OTA 包</span><span class="size">≈1.5 MB</span></a>
-    <div class="hash"><span class="lbl">SHA-256</span><code>6e732b6d88d22498a9d1da63af2830d06e21f057f9aba11927f69141ea0fb930</code><button class="copy" data-hash="6e732b6d88d22498a9d1da63af2830d06e21f057f9aba11927f69141ea0fb930">复制</button></div>
-    <p class="howto">升级方法：在模块的网页仪表盘里找到固件更新入口，上传 OTA 包即可，不要断电。本站所有后续版本 OTA 升级永久免费。</p>
-  </div>
+    <p class="pgroup">老款 · MODEL 3 / Y LEGACY</p>
+    <div class="tiers">
+      <div class="tier"><div class="tn">基础版</div><div class="tp">¥399</div><p class="td">未购 EAP / FSD：脱手提醒解除、持续 AP、实验变道、电池预热、踏板映射等强化功能。</p><button class="buy" data-plan="老款 基础版 ¥399">留言下单</button></div>
+      <div class="tier"><div class="tn">EAP 版</div><div class="tp">¥499</div><p class="td">车已购 EAP：在基础版之上，再加 NOA 自动打灯、免确认变道、召唤距离放开。</p><button class="buy" data-plan="老款 EAP版 ¥499">留言下单</button></div>
+      <div class="tier"><div class="tn">FSD 版</div><div class="tp">¥599</div><p class="td">车已购 FSD：在 EAP 版之上，再加红绿灯识别（TLSSC）激活、地区限制解锁。</p><button class="buy" data-plan="老款 FSD版 ¥599">留言下单</button></div>
+    </div>
 
-  <div class="card" id="price">
-    <h2><span class="tag">KIT PRICE</span>组装套件价格</h2>
-    <p>本站卖的是<strong>组装好的空白硬件套件</strong>：ESP32-P4 主板 + 3× SN65HVD230 CAN 模块 + X179 免破线线束 + 降压模块，全部组装好发货。<strong>模块不预装固件</strong>，到手后在本页免费下载对应固件自刷，后续 OTA 更新永久免费。按车的订阅选档——硬件是同一套，差别在能解锁的功能。</p>
-    <p class="price-group">老款 · MODEL 3 / Y LEGACY</p>
-    <div class="tier"><div><div class="t-name">基础版</div><div class="t-desc">未购 EAP / FSD：脱手提醒解除、持续 AP、实验变道、电池预热、踏板映射等强化功能</div></div><div class="t-price">¥399</div></div>
-    <div class="tier"><div><div class="t-name">EAP 版</div><div class="t-desc">车已购 EAP：在基础版之上，再加 NOA 自动打灯、免确认变道、召唤距离放开</div></div><div class="t-price">¥499</div></div>
-    <div class="tier"><div><div class="t-name">FSD 版</div><div class="t-desc">车已购 FSD：在 EAP 版之上，再加红绿灯识别（TLSSC）激活、地区限制解锁</div></div><div class="t-price">¥599</div></div>
-    <p class="price-group">新款 · MODEL 3 焕新版 / MODEL Y JUNIPER</p>
-    <div class="tier"><div><div class="t-name">基础版</div><div class="t-desc">未购 EAP / FSD：同老款基础版功能集</div></div><div class="t-price">¥499</div></div>
-    <div class="tier"><div><div class="t-name">EAP 版</div><div class="t-desc">车已购 EAP：同老款 EAP 版功能集</div></div><div class="t-price">¥599</div></div>
-    <div class="tier"><div><div class="t-name">FSD 版</div><div class="t-desc">车已购 FSD：同老款 FSD 版功能集</div></div><div class="t-price">¥699</div></div>
-    <p class="howto">购买方式：点右下角客服按钮留言咨询（请注明车型年份和已购的订阅档位），确认适配后再下单。前提：车机软件 ≥ 2026.20。</p>
-  </div>
+    <p class="pgroup">新款 · MODEL 3 焕新版 / MODEL Y JUNIPER</p>
+    <div class="tiers">
+      <div class="tier"><div class="tn">基础版</div><div class="tp">¥499</div><p class="td">未购 EAP / FSD：同老款基础版功能集。</p><button class="buy" data-plan="新款 基础版 ¥499">留言下单</button></div>
+      <div class="tier"><div class="tn">EAP 版</div><div class="tp">¥599</div><p class="td">车已购 EAP：同老款 EAP 版功能集。</p><button class="buy" data-plan="新款 EAP版 ¥599">留言下单</button></div>
+      <div class="tier"><div class="tn">FSD 版</div><div class="tp">¥699</div><p class="td">车已购 FSD：同老款 FSD 版功能集。</p><button class="buy" data-plan="新款 FSD版 ¥699">留言下单</button></div>
+    </div>
 
-  <div class="card" id="wiring">
-    <h2><span class="tag">WIRING</span>安装要点（详细版随货附带）</h2>
-    <table>
-      <tr><th>项目</th><th>说明</th></tr>
-      <tr><td>车侧接头</td><td>X179 诊断接头，后排中央扶手后方饰板内（2021–2023 款为 20 针版）</td></tr>
-      <tr><td>必做核对</td><td>接线前先进车辆服务模式 → CAN Port 页面，逐脚核对针脚对应的总线名称——不同线束布局至少有 4 种，不能只按年份猜</td></tr>
-      <tr><td>三路总线</td><td>Party（2/3 脚）、Vehicle（9/10 脚）、Chassis（13/14 脚）；1 脚 +12V、20 脚 GND（以服务模式页面实测为准）</td></tr>
-      <tr><td>主板接线</td><td><span class="mono">CAN1 TX GPIO20 / RX GPIO21 · CAN2 TX GPIO22 / RX GPIO23 · CAN3 TX GPIO26 / RX GPIO27</span></td></tr>
-      <tr><td>收发模块</td><td>SN65HVD230 ×3：拆掉 120Ω 终端电阻、开启高速模式（特斯拉总线自带终端）</td></tr>
-      <tr><td>供电</td><td>X179 的 12V 经降压模块转 5V 给主板供电</td></tr>
-      <tr><td>车机版本</td><td>需要车机软件 ≥ 2026.20，低于此版本功能不正常</td></tr>
-    </table>
-  </div>
+    <p class="pnote">点「留言下单」会打开客服窗口并自动填好你选的档位，确认适配后再付款发货。<br>所有档位均含 <span class="gold">永久免费 OTA 升级</span> · 固件免费下载自刷 · 后续更新免费</p>
+  </section>
 
-  <div class="card">
-    <h2><span class="tag">OPEN SOURCE</span>源码与许可证</h2>
-    <p>本固件来自开源项目 <a href="https://github.com/06066060606060/P4can-universal-unlock">P4-CAN Universal Unlock</a>（作者 06066060606060），按 <strong>GPLv3</strong> 许可证发布。本站提供的固件包与原项目发布包一致（可用上方 SHA-256 校验），完整源代码可在原项目仓库获取。本站与原作者无隶属关系，仅作分发与本地化说明。</p>
-  </div>
+  <!-- WIRING -->
+  <section class="sec" id="wiring">
+    <p class="sec-label">INSTALL</p>
+    <h2 class="sec-title">安装要点</h2>
+    <p class="sec-sub">详细版随货附带，这里先看关键的几条——尤其第一条，不能省。</p>
+    <div class="tcard">
+      <table>
+        <tr><th>车侧接头</th><td>X179 诊断接头，后排中央扶手后方饰板内（2021–2023 款为 20 针版）</td></tr>
+        <tr><th>必做核对</th><td>接线前先进车辆服务模式 → CAN Port 页面，逐脚核对针脚对应的总线名称——不同线束布局至少有 4 种，不能只按年份猜</td></tr>
+        <tr><th>三路总线</th><td>Party（2/3 脚）、Vehicle（9/10 脚）、Chassis（13/14 脚）；1 脚 +12V、20 脚 GND（以服务模式页面实测为准）</td></tr>
+        <tr><th>主板接线</th><td><span class="mono">CAN1 TX GPIO20 / RX GPIO21 · CAN2 TX GPIO22 / RX GPIO23 · CAN3 TX GPIO26 / RX GPIO27</span></td></tr>
+        <tr><th>收发模块</th><td>SN65HVD230 ×3：拆掉 120Ω 终端电阻、开启高速模式（特斯拉总线自带终端）</td></tr>
+        <tr><th>供电</th><td>X179 的 12V 经降压模块转 5V 给主板供电</td></tr>
+        <tr><th>车机版本</th><td>需要车机软件 ≥ 2026.20，低于此版本功能不正常</td></tr>
+      </table>
+    </div>
+
+    <div class="oscard">
+      <h3>源码与许可证</h3>
+      <p>本固件来自开源项目 <a href="https://github.com/06066060606060/P4can-universal-unlock">P4-CAN Universal Unlock</a>（作者 06066060606060），按 <strong>GPLv3</strong> 许可证发布。本站提供的固件包与原项目发布包一致（可用上方 SHA-256 校验），完整源代码可在原项目仓库获取。本站与原作者无隶属关系，仅作分发与本地化说明。</p>
+    </div>
+  </section>
 
   <footer>
     免责声明：本模块为第三方开源硬件方案，与 Tesla, Inc. 无关。安装涉及车辆 CAN 总线操作，风险自担；部分功能需要车辆已订阅 EAP/FSD 才能生效，本模块不提供任何付费功能的破解。使用时请遵守当地法律法规，驾驶员监控相关功能请谨慎评估后再开启。特别提示：整车尚在特斯拉基本保修期内（4 年或 8 万公里，以先到为准）的车主，建议暂缓安装，出保后再使用。
     <div class="brand">888AI.ME</div>
   </footer>
 </div>
+
 <!-- ===== 在线客服弹窗 ===== -->
 <button id="kfBtn" aria-label="联系客服">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
@@ -295,13 +506,14 @@
     <details class="kf-q"><summary>我的车能用吗？</summary><div class="a">适用于特斯拉 Model 3 / Y，车机软件需要 ≥ 2026.20（低于这个版本功能不正常）。下单/动手前先在车机里确认版本号。</div></details>
     <details class="kf-q"><summary>REV1.X 和 REV3.X 固件怎么选？</summary><div class="a">看主板 ESP32-P4 芯片的版本：买成品的按卖家标注选；自己买板的看芯片丝印，或直接问板卡卖家。两个版本的固件包不通用，选错刷不上或运行异常。</div></details>
     <details class="kf-q"><summary>第一次刷机怎么做？</summary><div class="a">用 FULLFLASH 整刷包：电脑 Chrome 打开 ESP 在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选 merged 整刷包从地址 0x0 写入。</div></details>
-    <details class="kf-q"><summary>以后升级固件怎么做？</summary><div class="a">只能用 OTA 包：在模块网页仪表盘的固件更新入口上传 OTA 包，过程不要断电。千万别拿 FULLFLASH 整刷包当更新包刷——这是已知的模块重启故障原因。</div></details>
+    <details class="kf-q"><summary>以后升级固件怎么做？</summary><div class="a">只能用 OTA 包：在模块网页仪表盘的固件更新入口上传 OTA 包，过程不要断电。千万别拿 FULLFLASH 整刷包当更新包刷——这是已知的模块重启故障原因。本站 OTA 升级永久免费。</div></details>
     <details class="kf-q"><summary>模块装好后自己重启，怎么回事？</summary><div class="a">先查两件事：①是不是把整刷包当更新包刷了（重刷对应版本的 OTA 包纠正）；②供电是否稳定（12V 转 5V 的降压模块输出不足也会这样）。还不行就留言说明车型和刷的包名。</div></details>
     <details class="kf-q"><summary>没买 EAP / FSD 能用吗？</summary><div class="a">基础功能可以正常用。但召唤、红绿灯识别（TLSSC）这类功能需要车辆本身已订阅 EAP / FSD 才能生效——本模块只做地区与距离等限制的解锁，不提供任何付费功能的破解。</div></details>
     <details class="kf-q"><summary>接线难不难？要破线吗？</summary><div class="a">走后排 X179 诊断接头，不用破线。但接线前必须先进车辆服务模式的 CAN Port 页面，逐脚核对针脚对应的总线名称——不同年份线束布局至少有 4 种，不能只按年份猜。详细接线表在本站下载页下方。</div></details>
     <details class="kf-q"><summary>装这个影响保修吗？</summary><div class="a">先说结论：整车还在特斯拉基本保修期内（4 年或 8 万公里，以先到为准）的，建议先别装，等出保后再考虑。安装涉及车辆 CAN 总线操作，特斯拉有可能据此拒绝相关部件甚至整车保修；已出保的车辆也请自行评估风险后再动手。本站仅提供固件分发与安装说明，与 Tesla, Inc. 无关。</div></details>
+    <details class="kf-q"><summary>怎么购买套件？</summary><div class="a">在本站价格区点对应档位的「留言下单」，或直接在下方留言注明车型年份和已购订阅档位。客服确认适配后，会告知付款与发货方式。目前支持留言下单人工确认，在线支付正在接入中。</div></details>
 
-    <p class="kf-sec">留言咨询</p>
+    <p class="kf-sec">留言咨询 / 下单</p>
     <form class="kf-form" id="kfForm">
       <label>你的称呼（选填）</label>
       <input type="text" name="name" placeholder="怎么称呼你">
@@ -329,11 +541,23 @@
 
   // ---- support popup ----
   var kfPanel = document.getElementById('kfPanel');
+  function openKf(){ kfPanel.classList.add('open'); }
   document.getElementById('kfBtn').addEventListener('click', function(){
     kfPanel.classList.toggle('open');
   });
+  document.getElementById('navKf').addEventListener('click', openKf);
   document.getElementById('kfClose').addEventListener('click', function(){
     kfPanel.classList.remove('open');
+  });
+  // ---- order buttons: open popup with the chosen plan prefilled ----
+  document.querySelectorAll('.buy').forEach(function(b){
+    b.addEventListener('click', function(){
+      var ta = document.querySelector('#kfForm textarea[name="message"]');
+      if (ta) { ta.value = '我想购买：' + b.getAttribute('data-plan') + '。我的车型/年份：'; }
+      openKf();
+      var em = document.querySelector('#kfForm input[name="email"]');
+      if (em) { setTimeout(function(){ em.focus(); }, 260); }
+    });
   });
   document.getElementById('kfForm').addEventListener('submit', function(ev){
     ev.preventDefault();
@@ -343,6 +567,7 @@
       _subject: '888ai.me 客服留言',
       _template: 'table',
       _captcha: 'false',
+      'email': data.get('email'),
       '称呼': data.get('name') || '（未留称呼）',
       '回复邮箱': data.get('email'),
       '车型车机': data.get('car') || '（未填）',
