@@ -5,60 +5,153 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>P4-CAN 固件下载 · 888ai.me</title>
 <style>
-  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; background: #f6f7f9; color: #1c1e21; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
-  h1 { font-size: 24px; margin: 8px 0 4px; }
-  .sub { color: #606770; margin: 0 0 20px; }
-  .card { background: #fff; border: 1px solid #dddfe2; border-radius: 10px; padding: 16px 18px; margin: 14px 0; }
-  .card h2 { font-size: 18px; margin: 0 0 10px; }
-  .warn { border-color: #e0a800; background: #fffaf0; }
-  .dl { display: block; background: #1877f2; color: #fff; text-decoration: none; text-align: center; padding: 12px; border-radius: 8px; font-size: 16px; margin: 10px 0 4px; }
-  .dl.secondary { background: #42b883; }
-  .meta { color: #606770; font-size: 13px; word-break: break-all; }
-  code { background: #eef0f2; padding: 1px 5px; border-radius: 4px; font-size: 12px; word-break: break-all; }
-  table { border-collapse: collapse; width: 100%; font-size: 14px; }
-  td, th { border: 1px solid #dddfe2; padding: 6px 8px; text-align: left; }
-  footer { color: #90949c; font-size: 12px; margin-top: 28px; line-height: 1.7; }
-  a { color: #1877f2; }
+  :root{
+    --bg:#05070d; --panel:rgba(16,22,34,.78); --line:rgba(94,234,212,.16);
+    --txt:#e8eef6; --dim:#93a3b8; --cyan:#22d3ee; --teal:#2dd4bf; --red:#ff3b30;
+    --amber:#f5b83d; --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--txt); min-height:100vh; overflow-x:hidden;
+  }
+  /* ---- tech background layers ---- */
+  .bgfx{position:fixed; inset:0; z-index:-2;
+    background:
+      radial-gradient(900px 480px at 12% -6%, rgba(34,211,238,.20), transparent 60%),
+      radial-gradient(820px 520px at 96% 108%, rgba(255,59,48,.13), transparent 60%),
+      radial-gradient(600px 380px at 88% 8%, rgba(45,212,191,.10), transparent 60%),
+      var(--bg);
+  }
+  .grid{position:fixed; inset:-60px; z-index:-1; pointer-events:none;
+    background:
+      linear-gradient(rgba(56,189,248,.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,189,248,.055) 1px, transparent 1px);
+    background-size:44px 44px;
+    -webkit-mask-image:radial-gradient(ellipse 90% 70% at 50% 0%, #000 30%, transparent 78%);
+            mask-image:radial-gradient(ellipse 90% 70% at 50% 0%, #000 30%, transparent 78%);
+    animation:drift 14s linear infinite;
+  }
+  @keyframes drift{from{background-position:0 0,0 0}to{background-position:0 44px,44px 0}}
+  @media (prefers-reduced-motion: reduce){ .grid{animation:none} .dot{animation:none} }
+
+  .wrap{max-width:820px; margin:0 auto; padding:44px 18px 56px}
+
+  /* ---- hero ---- */
+  .kicker{font-family:var(--mono); font-size:12px; letter-spacing:.32em; color:var(--teal); text-transform:uppercase; margin:0 0 10px}
+  h1{font-size:clamp(44px,9vw,72px); line-height:1.04; margin:0; font-weight:800; letter-spacing:.01em;
+     background:linear-gradient(92deg,#fff 20%, var(--cyan) 55%, var(--teal) 80%);
+     -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+     filter:drop-shadow(0 0 22px rgba(34,211,238,.25));}
+  .hero-sub{color:var(--dim); font-size:16px; margin:14px 0 0; line-height:1.7}
+  .hero-sub strong{color:var(--txt)}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin:20px 0 6px}
+  .chip{font-family:var(--mono); font-size:12.5px; color:var(--txt);
+        border:1px solid var(--line); background:rgba(34,211,238,.06);
+        padding:6px 12px; border-radius:999px; backdrop-filter:blur(6px)}
+  .chip.ver{border-color:rgba(63,185,80,.45); color:#7ee2a0; background:rgba(63,185,80,.08)}
+  .dot{display:inline-block; width:8px; height:8px; border-radius:50%; background:#3fb950; margin-right:7px;
+       box-shadow:0 0 10px #3fb950; animation:pulse 1.8s ease-in-out infinite; vertical-align:1px}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  /* ---- cards ---- */
+  .card{position:relative; background:var(--panel); border:1px solid rgba(148,184,220,.14);
+        border-radius:16px; padding:22px 22px 18px; margin:20px 0;
+        backdrop-filter:blur(10px); box-shadow:0 18px 44px rgba(0,0,0,.45)}
+  .card::before{content:""; position:absolute; top:0; left:22px; right:22px; height:1px;
+        background:linear-gradient(90deg, transparent, rgba(34,211,238,.55), transparent)}
+  .card h2{font-size:19px; margin:0 0 12px; display:flex; align-items:center; gap:10px}
+  .card h2 .tag{font-family:var(--mono); font-size:11px; letter-spacing:.14em; color:var(--cyan);
+        border:1px solid rgba(34,211,238,.4); padding:3px 8px; border-radius:6px; font-weight:400}
+  .card p{line-height:1.75; color:#c6d2e0; margin:8px 0}
+  .card p strong{color:#fff}
+  .warn{border-color:rgba(245,184,61,.45); box-shadow:0 0 0 1px rgba(245,184,61,.12), 0 18px 44px rgba(0,0,0,.45)}
+  .warn::before{background:linear-gradient(90deg, transparent, rgba(245,184,61,.7), transparent)}
+  .warn h2{color:var(--amber)}
+
+  /* ---- downloads ---- */
+  .dl{display:flex; align-items:center; justify-content:space-between; gap:12px;
+      text-decoration:none; color:#031018; font-weight:700; font-size:16.5px;
+      background:linear-gradient(92deg, var(--cyan), var(--teal));
+      padding:15px 18px; border-radius:12px; margin:14px 0 8px;
+      box-shadow:0 8px 28px rgba(34,211,238,.35); transition:transform .15s ease, box-shadow .15s ease}
+  .dl:hover{transform:translateY(-2px); box-shadow:0 14px 34px rgba(34,211,238,.5)}
+  .dl .size{font-family:var(--mono); font-weight:400; font-size:13px; opacity:.75}
+  .dl.ota{background:rgba(45,212,191,.07); color:var(--teal); border:1px solid rgba(45,212,191,.55);
+      box-shadow:none}
+  .dl.ota:hover{background:rgba(45,212,191,.14); box-shadow:0 10px 26px rgba(45,212,191,.18)}
+  .hash{display:flex; align-items:center; gap:8px; background:rgba(0,0,0,.42);
+        border:1px solid rgba(148,184,220,.16); border-radius:8px; padding:7px 10px; margin:0 0 6px}
+  .hash .lbl{font-family:var(--mono); font-size:11px; color:var(--dim); letter-spacing:.08em; white-space:nowrap}
+  .hash code{font-family:var(--mono); font-size:11.5px; color:#9fd8e8; word-break:break-all; flex:1}
+  .copy{flex:none; font-family:var(--mono); font-size:11px; color:var(--cyan); background:transparent;
+        border:1px solid rgba(34,211,238,.45); border-radius:6px; padding:4px 9px; cursor:pointer}
+  .copy:hover{background:rgba(34,211,238,.12)}
+  .howto{font-size:14px; color:var(--dim)}
+
+  /* ---- table ---- */
+  table{border-collapse:collapse; width:100%; font-size:14px; margin-top:6px}
+  th,td{border:1px solid rgba(148,184,220,.14); padding:9px 11px; text-align:left; line-height:1.65; vertical-align:top}
+  th{background:rgba(34,211,238,.08); color:var(--txt); font-family:var(--mono); font-weight:600; font-size:12.5px; letter-spacing:.06em; white-space:nowrap}
+  td{color:#c6d2e0}
+  td:first-child{color:var(--txt); font-weight:600; white-space:nowrap}
+  .mono{font-family:var(--mono); font-size:12.5px; color:#9fd8e8}
+
+  a{color:var(--cyan)}
+  footer{color:#66788e; font-size:12.5px; margin-top:34px; line-height:1.85;
+         border-top:1px solid rgba(148,184,220,.12); padding-top:18px}
+  footer .brand{font-family:var(--mono); letter-spacing:.28em; color:var(--dim); margin-top:10px}
 </style>
 </head>
 <body>
+<div class="bgfx"></div>
+<div class="grid"></div>
 <div class="wrap">
+
+  <p class="kicker">P4-CAN Universal Unlock // Firmware</p>
   <h1>P4-CAN 固件下载</h1>
-  <p class="sub">P4-CAN Universal Unlock · 中文版固件 · 当前版本 <strong>v3.35.3</strong>（2026-11-20 发布）</p>
+  <p class="hero-sub">ESP32-P4 车载扩展模块 · 中文版固件 · 当前版本 <strong>v3.35.3</strong>（2026-11-20 发布）</p>
+  <div class="chips">
+    <span class="chip ver"><span class="dot"></span>v3.35.3 LATEST</span>
+    <span class="chip">MODEL 3 / Y</span>
+    <span class="chip">车机 ≥ 2026.20</span>
+    <span class="chip">ESP32-P4 · 32MB FLASH</span>
+    <span class="chip">GPLv3 开源</span>
+  </div>
 
   <div class="card warn">
-    <h2>⚠️ 下载前先确认两件事</h2>
+    <h2>⚠ 下载前先确认两件事</h2>
     <p>1. <strong>芯片版本</strong>：主板是 ESP32-P4 芯片，分 REV1.X 和 REV3.X 两个版本，固件包不通用。买成品的按卖家标注选；自己买板的看芯片丝印或问板卡卖家。</p>
     <p>2. <strong>整刷包 ≠ 更新包</strong>：第一次刷机用 FULLFLASH 整刷包；以后升级<strong>只能用 OTA 包</strong>。拿整刷包当更新包刷，是已知的重启故障原因（原项目作者明确提醒过）。</p>
   </div>
 
   <div class="card">
-    <h2>第一次刷机 · FULLFLASH 整刷包</h2>
-    <a class="dl" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.FULLFLASH.REV3.X.merged.bin">下载 REV3.X 整刷包（32 MB）</a>
-    <p class="meta">SHA-256: <code>c67bdb11326a4cffa29bf1063bd23ef3c10e33c88be850786ebf8387d9d55ac4</code></p>
-    <a class="dl" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.FULLFLASH.REV1.X.merged.bin">下载 REV1.X 整刷包（32 MB）</a>
-    <p class="meta">SHA-256: <code>c25c516ba2719dcb0d432b816ea31477d8547d2527e301b22b414975b78d052d</code></p>
-    <p>刷机方法：电脑 Chrome 打开 ESP 在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选择 merged 整刷包从地址 0x0 写入。</p>
+    <h2><span class="tag">FIRST FLASH</span>第一次刷机 · FULLFLASH 整刷包</h2>
+    <a class="dl" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.FULLFLASH.REV3.X.merged.bin"><span>⬇ REV3.X 整刷包</span><span class="size">32 MB</span></a>
+    <div class="hash"><span class="lbl">SHA-256</span><code>c67bdb11326a4cffa29bf1063bd23ef3c10e33c88be850786ebf8387d9d55ac4</code><button class="copy" data-hash="c67bdb11326a4cffa29bf1063bd23ef3c10e33c88be850786ebf8387d9d55ac4">复制</button></div>
+    <a class="dl" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.FULLFLASH.REV1.X.merged.bin"><span>⬇ REV1.X 整刷包</span><span class="size">32 MB</span></a>
+    <div class="hash"><span class="lbl">SHA-256</span><code>c25c516ba2719dcb0d432b816ea31477d8547d2527e301b22b414975b78d052d</code><button class="copy" data-hash="c25c516ba2719dcb0d432b816ea31477d8547d2527e301b22b414975b78d052d">复制</button></div>
+    <p class="howto">刷机方法：电脑 Chrome 打开 ESP 在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选择 merged 整刷包从地址 0x0 写入。</p>
   </div>
 
   <div class="card">
-    <h2>后续升级 · OTA 包</h2>
-    <a class="dl secondary" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.OTA.REV3.X.bin">下载 REV3.X OTA 包（约 1.5 MB）</a>
-    <p class="meta">SHA-256: <code>284efa0ec05cb44a95d35c72a2c2b48ebae66e5fbc74edba79bb4393232f12be</code></p>
-    <a class="dl secondary" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.OTA.REV1.X.bin">下载 REV1.X OTA 包（约 1.5 MB）</a>
-    <p class="meta">SHA-256: <code>6e732b6d88d22498a9d1da63af2830d06e21f057f9aba11927f69141ea0fb930</code></p>
-    <p>升级方法：在模块的网页仪表盘里找到固件更新入口，上传 OTA 包即可，不要断电。</p>
+    <h2><span class="tag">OTA UPDATE</span>后续升级 · OTA 包</h2>
+    <a class="dl ota" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.OTA.REV3.X.bin"><span>⬇ REV3.X OTA 包</span><span class="size">≈1.5 MB</span></a>
+    <div class="hash"><span class="lbl">SHA-256</span><code>284efa0ec05cb44a95d35c72a2c2b48ebae66e5fbc74edba79bb4393232f12be</code><button class="copy" data-hash="284efa0ec05cb44a95d35c72a2c2b48ebae66e5fbc74edba79bb4393232f12be">复制</button></div>
+    <a class="dl ota" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.OTA.REV1.X.bin"><span>⬇ REV1.X OTA 包</span><span class="size">≈1.5 MB</span></a>
+    <div class="hash"><span class="lbl">SHA-256</span><code>6e732b6d88d22498a9d1da63af2830d06e21f057f9aba11927f69141ea0fb930</code><button class="copy" data-hash="6e732b6d88d22498a9d1da63af2830d06e21f057f9aba11927f69141ea0fb930">复制</button></div>
+    <p class="howto">升级方法：在模块的网页仪表盘里找到固件更新入口，上传 OTA 包即可，不要断电。</p>
   </div>
 
   <div class="card">
-    <h2>安装要点（详细版随货附带）</h2>
+    <h2><span class="tag">WIRING</span>安装要点（详细版随货附带）</h2>
     <table>
       <tr><th>项目</th><th>说明</th></tr>
       <tr><td>车侧接头</td><td>X179 诊断接头，后排中央扶手后方饰板内（2021–2023 款为 20 针版）</td></tr>
       <tr><td>必做核对</td><td>接线前先进车辆服务模式 → CAN Port 页面，逐脚核对针脚对应的总线名称——不同线束布局至少有 4 种，不能只按年份猜</td></tr>
       <tr><td>三路总线</td><td>Party（2/3 脚）、Vehicle（9/10 脚）、Chassis（13/14 脚）；1 脚 +12V、20 脚 GND（以服务模式页面实测为准）</td></tr>
-      <tr><td>主板接线</td><td>CAN1 TX GPIO20 / RX GPIO21；CAN2 TX GPIO22 / RX GPIO23；CAN3 TX GPIO26 / RX GPIO27</td></tr>
+      <tr><td>主板接线</td><td><span class="mono">CAN1 TX GPIO20 / RX GPIO21 · CAN2 TX GPIO22 / RX GPIO23 · CAN3 TX GPIO26 / RX GPIO27</span></td></tr>
       <tr><td>收发模块</td><td>SN65HVD230 ×3：拆掉 120Ω 终端电阻、开启高速模式（特斯拉总线自带终端）</td></tr>
       <tr><td>供电</td><td>X179 的 12V 经降压模块转 5V 给主板供电</td></tr>
       <tr><td>车机版本</td><td>需要车机软件 ≥ 2026.20，低于此版本功能不正常</td></tr>
@@ -66,14 +159,24 @@
   </div>
 
   <div class="card">
-    <h2>源码与许可证</h2>
+    <h2><span class="tag">OPEN SOURCE</span>源码与许可证</h2>
     <p>本固件来自开源项目 <a href="https://github.com/06066060606060/P4can-universal-unlock">P4-CAN Universal Unlock</a>（作者 06066060606060），按 <strong>GPLv3</strong> 许可证发布。本站提供的固件包与原项目发布包一致（可用上方 SHA-256 校验），完整源代码可在原项目仓库获取。本站与原作者无隶属关系，仅作分发与本地化说明。</p>
   </div>
 
   <footer>
-    免责声明：本模块为第三方开源硬件方案，与 Tesla, Inc. 无关。安装涉及车辆 CAN 总线操作，风险自担；部分功能需要车辆已订阅 EAP/FSD 才能生效，本模块不提供任何付费功能的破解。使用时请遵守当地法律法规，驾驶员监控相关功能请谨慎评估后再开启。<br>
-    888ai.me
+    免责声明：本模块为第三方开源硬件方案，与 Tesla, Inc. 无关。安装涉及车辆 CAN 总线操作，风险自担；部分功能需要车辆已订阅 EAP/FSD 才能生效，本模块不提供任何付费功能的破解。使用时请遵守当地法律法规，驾驶员监控相关功能请谨慎评估后再开启。
+    <div class="brand">888AI.ME</div>
   </footer>
 </div>
+<script>
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var h = btn.getAttribute('data-hash');
+      if (navigator.clipboard) { navigator.clipboard.writeText(h); }
+      btn.textContent = '已复制 ✓';
+      setTimeout(function(){ btn.textContent = '复制'; }, 1600);
+    });
+  });
+</script>
 </body>
 </html>
