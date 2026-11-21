@@ -497,7 +497,7 @@
 <div id="kfPanel" role="dialog" aria-label="在线客服">
   <div class="kf-head">
     <h3><span class="dot"></span>在线客服</h3>
-    <p>常见问题点开就能看答案；解决不了就在下面留言，客服会亲自回复到你留的邮箱。</p>
+    <p>常见问题点开就能看答案；解决不了就在下面留言、留个手机号，客服会尽快联系你。</p>
     <button class="kf-x" id="kfClose" aria-label="关闭">×</button>
   </div>
   <div class="kf-body">
@@ -517,8 +517,10 @@
     <form class="kf-form" id="kfForm">
       <label>你的称呼（选填）</label>
       <input type="text" name="name" placeholder="怎么称呼你">
-      <label>联系邮箱（必填，回复发到这里）</label>
-      <input type="email" name="email" required placeholder="you@example.com">
+      <label>手机号码（必填，客服联系你）</label>
+      <input type="tel" name="phone" required placeholder="11 位手机号" autocomplete="tel">
+      <label>微信号（选填，方便发图片资料）</label>
+      <input type="text" name="wechat" placeholder="微信号，可不填">
       <label>车型 / 车机版本（选填）</label>
       <input type="text" name="car" placeholder="例：2023 款 Model 3 / 2026.26">
       <label>问题描述（必填）</label>
@@ -555,7 +557,7 @@
       var ta = document.querySelector('#kfForm textarea[name="message"]');
       if (ta) { ta.value = '我想购买：' + b.getAttribute('data-plan') + '。我的车型/年份：'; }
       openKf();
-      var em = document.querySelector('#kfForm input[name="email"]');
+      var em = document.querySelector('#kfForm input[name="phone"]');
       if (em) { setTimeout(function(){ em.focus(); }, 260); }
     });
   });
@@ -567,9 +569,9 @@
       _subject: '888ai.me 客服留言',
       _template: 'table',
       _captcha: 'false',
-      'email': data.get('email'),
       '称呼': data.get('name') || '（未留称呼）',
-      '回复邮箱': data.get('email'),
+      '联系电话': data.get('phone'),
+      '微信号': data.get('wechat') || '（未留）',
       '车型车机': data.get('car') || '（未填）',
       '问题描述': data.get('message')
     };
@@ -580,7 +582,7 @@
       body: JSON.stringify(payload)
     }).then(function(r){ return r.json(); }).then(function(j){
       if (j.success) {
-        msg.textContent = '已收到！客服会回复到你留的邮箱，请留意收件箱（包括垃圾箱）。';
+        msg.textContent = '已收到！客服会尽快通过电话或微信联系你，请保持电话畅通。';
         msg.className = 'ok'; form.reset();
       } else {
         msg.textContent = '发送失败，请稍后再试一次。';
