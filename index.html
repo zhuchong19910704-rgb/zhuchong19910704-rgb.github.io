@@ -260,6 +260,18 @@
   #kfSend:disabled{opacity:.55; cursor:wait}
   #kfMsg{font-size:13px; margin:10px 0 0; min-height:18px}
   #kfMsg.ok{color:#7ee2a0} #kfMsg.err{color:#ff9d97}
+  /* ---- smart chat ---- */
+  .chat-log{max-height:264px; overflow-y:auto; padding:6px 2px 2px; display:flex; flex-direction:column; gap:8px}
+  .msg{max-width:88%; padding:9px 12px; border-radius:13px; font-size:13.5px; line-height:1.65; white-space:pre-line}
+  .msg.bot{align-self:flex-start; background:rgba(34,211,238,.09); border:1px solid rgba(34,211,238,.22); border-bottom-left-radius:4px}
+  .msg.me{align-self:flex-end; background:linear-gradient(92deg, rgba(34,211,238,.9), rgba(45,212,191,.9)); color:#031018; border-bottom-right-radius:4px; font-weight:600}
+  .chat-chips{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 8px}
+  .qc{background:rgba(255,255,255,.05); border:1px solid var(--line); color:var(--dim); border-radius:999px; padding:6px 11px; font-size:12.5px; cursor:pointer; font-family:inherit}
+  .qc:hover{color:var(--txt); border-color:rgba(34,211,238,.5)}
+  .chat-in{display:flex; gap:8px}
+  .chat-in input{flex:1; background:rgba(0,0,0,.4); color:var(--txt); border:1px solid rgba(148,184,220,.25); border-radius:9px; padding:10px 12px; font-size:14px; font-family:inherit; outline:none; min-width:0}
+  .chat-in input:focus{border-color:var(--cyan)}
+  #chatSend{flex:none; border:none; border-radius:9px; padding:0 18px; cursor:pointer; font-size:14px; font-weight:700; color:#031018; background:linear-gradient(92deg, var(--cyan), var(--teal)); font-family:inherit}
 </style>
 </head>
 <body>
@@ -496,24 +508,26 @@
 </button>
 <div id="kfPanel" role="dialog" aria-label="在线客服">
   <div class="kf-head">
-    <h3><span class="dot"></span>在线客服</h3>
-    <p>常见问题点开就能看答案；解决不了就在下面留言、留个手机号，客服会尽快联系你。</p>
+    <h3><span class="dot"></span>在线客服 · 智能答疑</h3>
+    <p>直接打字问，秒回；答不了的在下方留个手机号，客服尽快联系你。</p>
     <button class="kf-x" id="kfClose" aria-label="关闭">×</button>
   </div>
   <div class="kf-body">
-    <p class="kf-sec">常见问题 FAQ</p>
+    <div class="chat-log" id="chatLog">
+      <div class="msg bot">你好，我是 888ai.me 智能客服。价格、适配、刷机、保修都可以直接问我，秒回。</div>
+    </div>
+    <div class="chat-chips">
+      <button type="button" class="qc">套件多少钱？</button>
+      <button type="button" class="qc">我的车能用吗？</button>
+      <button type="button" class="qc">第一次怎么刷机？</button>
+      <button type="button" class="qc">影响保修吗？</button>
+    </div>
+    <div class="chat-in">
+      <input type="text" id="chatText" placeholder="输入你的问题，回车发送" autocomplete="off">
+      <button type="button" id="chatSend">发送</button>
+    </div>
 
-    <details class="kf-q"><summary>我的车能用吗？</summary><div class="a">适用于特斯拉 Model 3 / Y，车机软件需要 ≥ 2026.20（低于这个版本功能不正常）。下单/动手前先在车机里确认版本号。</div></details>
-    <details class="kf-q"><summary>REV1.X 和 REV3.X 固件怎么选？</summary><div class="a">看主板 ESP32-P4 芯片的版本：买成品的按卖家标注选；自己买板的看芯片丝印，或直接问板卡卖家。两个版本的固件包不通用，选错刷不上或运行异常。</div></details>
-    <details class="kf-q"><summary>第一次刷机怎么做？</summary><div class="a">用 FULLFLASH 整刷包：电脑 Chrome 打开 ESP 在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选 merged 整刷包从地址 0x0 写入。</div></details>
-    <details class="kf-q"><summary>以后升级固件怎么做？</summary><div class="a">只能用 OTA 包：在模块网页仪表盘的固件更新入口上传 OTA 包，过程不要断电。千万别拿 FULLFLASH 整刷包当更新包刷——这是已知的模块重启故障原因。本站 OTA 升级永久免费。</div></details>
-    <details class="kf-q"><summary>模块装好后自己重启，怎么回事？</summary><div class="a">先查两件事：①是不是把整刷包当更新包刷了（重刷对应版本的 OTA 包纠正）；②供电是否稳定（12V 转 5V 的降压模块输出不足也会这样）。还不行就留言说明车型和刷的包名。</div></details>
-    <details class="kf-q"><summary>没买 EAP / FSD 能用吗？</summary><div class="a">基础功能可以正常用。但召唤、红绿灯识别（TLSSC）这类功能需要车辆本身已订阅 EAP / FSD 才能生效——本模块只做地区与距离等限制的解锁，不提供任何付费功能的破解。</div></details>
-    <details class="kf-q"><summary>接线难不难？要破线吗？</summary><div class="a">走后排 X179 诊断接头，不用破线。但接线前必须先进车辆服务模式的 CAN Port 页面，逐脚核对针脚对应的总线名称——不同年份线束布局至少有 4 种，不能只按年份猜。详细接线表在本站下载页下方。</div></details>
-    <details class="kf-q"><summary>装这个影响保修吗？</summary><div class="a">先说结论：整车还在特斯拉基本保修期内（4 年或 8 万公里，以先到为准）的，建议先别装，等出保后再考虑。安装涉及车辆 CAN 总线操作，特斯拉有可能据此拒绝相关部件甚至整车保修；已出保的车辆也请自行评估风险后再动手。本站仅提供固件分发与安装说明，与 Tesla, Inc. 无关。</div></details>
-    <details class="kf-q"><summary>怎么购买套件？</summary><div class="a">在本站价格区点对应档位的「留言下单」，或直接在下方留言注明车型年份和已购订阅档位。客服确认适配后，会告知付款与发货方式。目前支持留言下单人工确认，在线支付正在接入中。</div></details>
-
-    <p class="kf-sec">留言咨询 / 下单</p>
+    <p class="kf-sec">留言 / 下单（智能客服答不了的，留号码人工联系）</p>
     <form class="kf-form" id="kfForm">
       <label>你的称呼（选填）</label>
       <input type="text" name="name" placeholder="怎么称呼你">
@@ -551,6 +565,49 @@
   document.getElementById('kfClose').addEventListener('click', function(){
     kfPanel.classList.remove('open');
   });
+  // ---- smart chat: instant answers, no backend ----
+  var QA = [
+    {k:['满血'], a:'满血与否取决于车自身的 FSD 版本和特斯拉的推送进度（市面说的「工厂版」指保留了特定出厂软件的车），和本模块无关。模块对已购 FSD 的车只做红绿灯识别激活和地区限制解锁，不提供 FSD 本体激活，也不承诺满血。'},
+    {k:['价格','多少钱','多少元','价位'], a:'组装套件价格（空白硬件，固件免费下载自刷，OTA 永久免费）：\n老款 Model 3/Y：基础 ¥399 / EAP ¥499 / FSD ¥599\n新款焕新版 / Juniper：基础 ¥499 / EAP ¥599 / FSD ¥699\n硬件是同一套，按车已购的订阅选档。点页面价格区的「留言下单」就能下单。'},
+    {k:['rev','选包','版本包','刷不上'], a:'固件分 REV1.X 和 REV3.X 两个包，看主板 ESP32-P4 芯片版本选，不通用。买成品按卖家标注；自己买板看芯片丝印，或问板卡卖家。'},
+    {k:['首刷','第一次','刷机','怎么刷','fullflash','整刷'], a:'第一次刷机用 FULLFLASH 整刷包：电脑 Chrome 打开在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选 merged 整刷包从地址 0x0 写入。下载和校验值都在本站下载区。'},
+    {k:['ota','升级','更新'], a:'后续升级只能用 OTA 包：在模块网页仪表盘的固件更新入口上传，过程不要断电。本站 OTA 升级永久免费。注意：千万别拿 FULLFLASH 整刷包当更新包刷，那是已知的模块重启故障原因。'},
+    {k:['重启','闪退','断开','不稳定'], a:'模块自己重启先查两件事：①是不是把整刷包当更新包刷了——重刷对应版本的 OTA 包纠正；②供电是否稳定——12V 转 5V 降压模块输出不足也会这样。还不行就在下方留手机号，客服联系你排查。'},
+    {k:['eap','fsd','没买','订阅'], a:'没买 EAP/FSD 也能用基础功能（脱手提醒解除、持续 AP、实验变道、电池预热等）。但召唤、红绿灯识别（TLSSC）需要车本身已订阅 EAP/FSD 才生效——模块只解锁地区与距离限制，不破解付费功能。'},
+    {k:['召唤','红绿灯','tlssc'], a:'召唤距离放开（±85m）需要车已购 EAP/FSD；红绿灯识别（TLSSC）需要车已购 FSD，模块负责激活和地区解锁，不提供功能本体。'},
+    {k:['接线','破线','安装','x179','针脚'], a:'走后排 X179 诊断接头对插，不用破线。但接线前必须先进车辆服务模式的 CAN Port 页面，逐脚核对针脚对应的总线名称——不同年份线束布局至少有 4 种，不能只按年份猜。详细接线表在本站「安装要点」区。'},
+    {k:['保修','质保'], a:'先说结论：整车还在特斯拉基本保修期内（4 年或 8 万公里，以先到为准）的，建议先别装，等出保后再考虑。安装涉及车辆 CAN 总线操作，特斯拉有可能据此拒绝相关部件甚至整车保修；已出保的车辆也请自行评估风险。'},
+    {k:['版本','2026','能用','适配','车型','model'], a:'适用于 Model 3 / Y，车机软件需要 ≥ 2026.20。低于 2026.20 功能不正常、不能用，请先升级车机。下单前先在车机里确认版本号。'},
+    {k:['下单','购买','支付','付款','发货','怎么买'], a:'下单方式：在本站价格区点对应档位的「留言下单」，或在下方表单留手机号并注明车型年份和已购订阅档位，客服确认适配后联系你付款发货。目前是人工确认下单，在线支付接入中。'},
+    {k:['电话','微信','联系','人工','真人'], a:'需要人工的话，在下方表单留手机号（微信号选填），客服会尽快联系你。'},
+    {k:['你好','您好','在吗','hi','hello'], a:'你好，我是 888ai.me 智能客服。价格、适配、刷机、保修都可以直接问我。'}
+  ];
+  function botAnswer(q){
+    var s = q.toLowerCase();
+    for (var i = 0; i < QA.length; i++){
+      for (var j = 0; j < QA[i].k.length; j++){
+        if (s.indexOf(QA[i].k[j]) !== -1) return QA[i].a;
+      }
+    }
+    return '这个问题我暂时答不上来，别急——在下方表单留个手机号、把问题写清楚，客服会尽快联系你。也可以换个说法再问我，比如「多少钱」「我的车能用吗」「怎么刷机」。';
+  }
+  var chatLog = document.getElementById('chatLog'), chatText = document.getElementById('chatText');
+  function addMsg(text, cls){
+    var d = document.createElement('div');
+    d.className = 'msg ' + cls; d.textContent = text;
+    chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight;
+    return d;
+  }
+  function askChat(q){
+    q = (q || '').trim(); if (!q) return;
+    addMsg(q, 'me'); chatText.value = '';
+    var t = addMsg('正在输入…', 'bot');
+    setTimeout(function(){ t.textContent = botAnswer(q); chatLog.scrollTop = chatLog.scrollHeight; }, 450);
+  }
+  document.getElementById('chatSend').addEventListener('click', function(){ askChat(chatText.value); });
+  chatText.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); askChat(chatText.value); } });
+  document.querySelectorAll('.qc').forEach(function(b){ b.addEventListener('click', function(){ askChat(b.textContent); }); });
+
   // ---- order buttons: open popup with the chosen plan prefilled ----
   document.querySelectorAll('.buy').forEach(function(b){
     b.addEventListener('click', function(){
