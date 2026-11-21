@@ -37,6 +37,27 @@
   @media (prefers-reduced-motion: reduce){ .grid{animation:none} .dot{animation:none} }
 
   .wrap{max-width:820px; margin:0 auto; padding:44px 18px 56px}
+  html{scroll-behavior:smooth}
+  ::selection{background:rgba(34,211,238,.35)}
+  .card{scroll-margin-top:84px; transition:border-color .2s ease}
+  .card:hover{border-color:rgba(34,211,238,.32)}
+  .tier{transition:border-color .2s ease, background .2s ease, transform .2s ease}
+  .tier:hover{border-color:rgba(34,211,238,.45); background:rgba(34,211,238,.05); transform:translateY(-1px)}
+
+  /* ---- top nav ---- */
+  .topnav{position:sticky; top:10px; z-index:40; display:flex; gap:6px; flex-wrap:wrap; align-items:center;
+    background:rgba(8,12,20,.85); border:1px solid rgba(148,184,220,.16); border-radius:999px;
+    padding:6px; margin:0 0 26px; backdrop-filter:blur(12px); box-shadow:0 10px 30px rgba(0,0,0,.4)}
+  .topnav a{color:var(--dim); text-decoration:none; font-size:13.5px; padding:7px 13px; border-radius:999px; transition:all .15s ease}
+  .topnav a:hover{color:#031018; background:linear-gradient(92deg, var(--cyan), var(--teal)); font-weight:700}
+  .topnav .brand{font-family:var(--mono); letter-spacing:.22em; color:var(--txt); padding:7px 8px 7px 14px; font-size:12.5px}
+
+  /* ---- selling strip ---- */
+  .strip{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:18px 0 2px}
+  .strip .s{background:rgba(255,255,255,.03); border:1px solid rgba(148,184,220,.14); border-radius:12px; padding:13px 14px}
+  .strip .s b{display:block; font-size:15px; margin-bottom:3px}
+  .strip .s span{color:var(--dim); font-size:12.5px; line-height:1.55; display:block}
+  .chip.ota{border-color:rgba(245,184,61,.55); color:#ffd97a; background:rgba(245,184,61,.09)}
 
   /* ---- hero ---- */
   .kicker{font-family:var(--mono); font-size:12px; letter-spacing:.32em; color:var(--teal); text-transform:uppercase; margin:0 0 10px}
@@ -158,9 +179,17 @@
 <div class="grid"></div>
 <div class="wrap">
 
+  <nav class="topnav">
+    <span class="brand">888AI.ME</span>
+    <a href="#version">车机版本</a>
+    <a href="#download">固件下载</a>
+    <a href="#price">套件价格</a>
+    <a href="#wiring">接线要点</a>
+  </nav>
+
   <p class="kicker">P4-CAN Universal Unlock // Firmware</p>
   <h1>P4-CAN 固件下载</h1>
-  <p class="hero-sub">ESP32-P4 车载扩展模块 · 中文版固件 · 当前版本 <strong>v3.35.3</strong>（2026-11-20 发布）</p>
+  <p class="hero-sub">ESP32-P4 车载扩展模块 · 中文版固件 · 当前版本 <strong>v3.35.3</strong>（2026-11-20 发布） · <strong>永久免费 OTA 升级</strong></p>
   <div class="chips">
     <span class="chip ver"><span class="dot"></span>v3.35.3 LATEST</span>
     <span class="chip">MODEL 3 / Y</span>
@@ -168,6 +197,14 @@
     <span class="chip">ESP32-P4 · 32MB FLASH</span>
     <span class="chip">GPLv3 开源</span>
     <span class="chip">组装套件 ¥399 起</span>
+    <span class="chip ota">永久免费 OTA</span>
+  </div>
+
+  <div class="strip">
+    <div class="s"><b>永久免费 OTA</b><span>固件更新终身免费，模块仪表盘在线升级</span></div>
+    <div class="s"><b>免破线安装</b><span>X179 诊断口对插，不改原车线路</span></div>
+    <div class="s"><b>中文仪表盘</b><span>全中文界面，功能设置一看就懂</span></div>
+    <div class="s"><b>开源可校验</b><span>GPLv3 开源发布，SHA-256 与原版对得上</span></div>
   </div>
 
   <div class="card warn">
@@ -176,7 +213,7 @@
     <p>2. <strong>整刷包 ≠ 更新包</strong>：第一次刷机用 FULLFLASH 整刷包；以后升级<strong>只能用 OTA 包</strong>。拿整刷包当更新包刷，是已知的重启故障原因（原项目作者明确提醒过）。</p>
   </div>
 
-  <div class="card">
+  <div class="card" id="version">
     <h2><span class="tag">VERSION</span>车机版本要求（先对号入座）</h2>
     <table>
       <tr><th>车机软件版本</th><th>能不能用</th></tr>
@@ -186,7 +223,7 @@
     </table>
   </div>
 
-  <div class="card">
+  <div class="card" id="download">
     <h2><span class="tag">FIRST FLASH</span>第一次刷机 · FULLFLASH 整刷包</h2>
     <a class="dl" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.FULLFLASH.REV3.X.merged.bin"><span>⬇ REV3.X 整刷包</span><span class="size">32 MB</span></a>
     <div class="hash"><span class="lbl">SHA-256</span><code>c67bdb11326a4cffa29bf1063bd23ef3c10e33c88be850786ebf8387d9d55ac4</code><button class="copy" data-hash="c67bdb11326a4cffa29bf1063bd23ef3c10e33c88be850786ebf8387d9d55ac4">复制</button></div>
@@ -196,17 +233,17 @@
   </div>
 
   <div class="card">
-    <h2><span class="tag">OTA UPDATE</span>后续升级 · OTA 包</h2>
+    <h2><span class="tag">OTA UPDATE</span>后续升级 · OTA 包（永久免费）</h2>
     <a class="dl ota" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.OTA.REV3.X.bin"><span>⬇ REV3.X OTA 包</span><span class="size">≈1.5 MB</span></a>
     <div class="hash"><span class="lbl">SHA-256</span><code>284efa0ec05cb44a95d35c72a2c2b48ebae66e5fbc74edba79bb4393232f12be</code><button class="copy" data-hash="284efa0ec05cb44a95d35c72a2c2b48ebae66e5fbc74edba79bb4393232f12be">复制</button></div>
     <a class="dl ota" href="https://github.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/releases/download/v3.35.3-zhcn/P4-CAN-Universal-v3.35.3.zh-CN.OTA.REV1.X.bin"><span>⬇ REV1.X OTA 包</span><span class="size">≈1.5 MB</span></a>
     <div class="hash"><span class="lbl">SHA-256</span><code>6e732b6d88d22498a9d1da63af2830d06e21f057f9aba11927f69141ea0fb930</code><button class="copy" data-hash="6e732b6d88d22498a9d1da63af2830d06e21f057f9aba11927f69141ea0fb930">复制</button></div>
-    <p class="howto">升级方法：在模块的网页仪表盘里找到固件更新入口，上传 OTA 包即可，不要断电。</p>
+    <p class="howto">升级方法：在模块的网页仪表盘里找到固件更新入口，上传 OTA 包即可，不要断电。本站所有后续版本 OTA 升级永久免费。</p>
   </div>
 
-  <div class="card">
+  <div class="card" id="price">
     <h2><span class="tag">KIT PRICE</span>组装套件价格</h2>
-    <p>本站卖的是<strong>组装好的空白硬件套件</strong>：ESP32-P4 主板 + 3× SN65HVD230 CAN 模块 + X179 免破线线束 + 降压模块，全部组装好发货。<strong>模块不预装固件</strong>，到手后在本页免费下载对应固件自刷，后续更新同样免费。按车的订阅选档——硬件是同一套，差别在能解锁的功能。</p>
+    <p>本站卖的是<strong>组装好的空白硬件套件</strong>：ESP32-P4 主板 + 3× SN65HVD230 CAN 模块 + X179 免破线线束 + 降压模块，全部组装好发货。<strong>模块不预装固件</strong>，到手后在本页免费下载对应固件自刷，后续 OTA 更新永久免费。按车的订阅选档——硬件是同一套，差别在能解锁的功能。</p>
     <p class="price-group">老款 · MODEL 3 / Y LEGACY</p>
     <div class="tier"><div><div class="t-name">基础版</div><div class="t-desc">未购 EAP / FSD：脱手提醒解除、持续 AP、实验变道、电池预热、踏板映射等强化功能</div></div><div class="t-price">¥399</div></div>
     <div class="tier"><div><div class="t-name">EAP 版</div><div class="t-desc">车已购 EAP：在基础版之上，再加 NOA 自动打灯、免确认变道、召唤距离放开</div></div><div class="t-price">¥499</div></div>
@@ -218,7 +255,7 @@
     <p class="howto">购买方式：点右下角客服按钮留言咨询（请注明车型年份和已购的订阅档位），确认适配后再下单。前提：车机软件 ≥ 2026.20。</p>
   </div>
 
-  <div class="card">
+  <div class="card" id="wiring">
     <h2><span class="tag">WIRING</span>安装要点（详细版随货附带）</h2>
     <table>
       <tr><th>项目</th><th>说明</th></tr>
