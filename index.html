@@ -102,6 +102,46 @@
   footer{color:#66788e; font-size:12.5px; margin-top:34px; line-height:1.85;
          border-top:1px solid rgba(148,184,220,.12); padding-top:18px}
   footer .brand{font-family:var(--mono); letter-spacing:.28em; color:var(--dim); margin-top:10px}
+
+  /* ---- support popup ---- */
+  #kfBtn{position:fixed; right:20px; bottom:20px; z-index:60; width:60px; height:60px; border-radius:50%;
+    border:1px solid rgba(34,211,238,.55); cursor:pointer; color:#fff;
+    background:linear-gradient(135deg, rgba(34,211,238,.9), rgba(255,59,48,.85));
+    box-shadow:0 12px 32px rgba(34,211,238,.35); display:flex; align-items:center; justify-content:center;
+    transition:transform .15s ease}
+  #kfBtn:hover{transform:translateY(-3px) scale(1.04)}
+  #kfBtn svg{width:28px; height:28px}
+  #kfPanel{position:fixed; right:20px; bottom:92px; z-index:60; width:min(392px, calc(100vw - 32px));
+    max-height:min(76vh, 720px); overflow-y:auto; border-radius:18px; padding:0 0 16px;
+    background:rgba(10,15,24,.96); border:1px solid rgba(34,211,238,.3);
+    box-shadow:0 24px 60px rgba(0,0,0,.6); backdrop-filter:blur(12px);
+    opacity:0; transform:translateY(14px) scale(.98); pointer-events:none; transition:all .22s ease}
+  #kfPanel.open{opacity:1; transform:none; pointer-events:auto}
+  .kf-head{position:sticky; top:0; padding:16px 18px 12px; background:rgba(10,15,24,.98);
+    border-bottom:1px solid rgba(148,184,220,.14); border-radius:18px 18px 0 0}
+  .kf-head h3{margin:0; font-size:17px; display:flex; align-items:center; gap:8px}
+  .kf-head p{margin:6px 0 0; font-size:12.5px; color:var(--dim); line-height:1.6}
+  .kf-x{position:absolute; right:12px; top:12px; background:none; border:none; color:var(--dim);
+    font-size:20px; cursor:pointer; line-height:1}
+  .kf-body{padding:6px 18px 0}
+  .kf-sec{font-family:var(--mono); font-size:11px; letter-spacing:.18em; color:var(--teal); margin:14px 0 8px}
+  details.kf-q{border:1px solid rgba(148,184,220,.14); border-radius:10px; margin:8px 0; background:rgba(255,255,255,.03)}
+  details.kf-q summary{cursor:pointer; padding:11px 13px; font-size:14px; font-weight:600; list-style:none}
+  details.kf-q summary::-webkit-details-marker{display:none}
+  details.kf-q summary::after{content:"+"; float:right; color:var(--cyan); font-family:var(--mono)}
+  details.kf-q[open ] summary::after{content:"–"}
+  details.kf-q .a{padding:0 13px 12px; font-size:13.5px; color:#c6d2e0; line-height:1.7}
+  .kf-form label{display:block; font-size:12.5px; color:var(--dim); margin:10px 0 5px}
+  .kf-form input,.kf-form textarea{width:100%; background:rgba(0,0,0,.4); color:var(--txt);
+    border:1px solid rgba(148,184,220,.25); border-radius:9px; padding:10px 12px; font-size:14px;
+    font-family:inherit; outline:none}
+  .kf-form input:focus,.kf-form textarea:focus{border-color:var(--cyan)}
+  .kf-form textarea{resize:vertical; min-height:84px}
+  #kfSend{width:100%; margin-top:14px; padding:12px; border:none; border-radius:10px; cursor:pointer;
+    font-size:15px; font-weight:700; color:#031018; background:linear-gradient(92deg, var(--cyan), var(--teal))}
+  #kfSend:disabled{opacity:.55; cursor:wait}
+  #kfMsg{font-size:13px; margin:10px 0 0; min-height:18px}
+  #kfMsg.ok{color:#7ee2a0} #kfMsg.err{color:#ff9d97}
 </style>
 </head>
 <body>
@@ -168,6 +208,44 @@
     <div class="brand">888AI.ME</div>
   </footer>
 </div>
+<!-- ===== 在线客服弹窗 ===== -->
+<button id="kfBtn" aria-label="联系客服">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+</button>
+<div id="kfPanel" role="dialog" aria-label="在线客服">
+  <div class="kf-head">
+    <h3><span class="dot"></span>在线客服</h3>
+    <p>常见问题点开就能看答案；解决不了就在下面留言，客服会亲自回复到你留的邮箱。</p>
+    <button class="kf-x" id="kfClose" aria-label="关闭">×</button>
+  </div>
+  <div class="kf-body">
+    <p class="kf-sec">常见问题 FAQ</p>
+
+    <details class="kf-q"><summary>我的车能用吗？</summary><div class="a">适用于特斯拉 Model 3 / Y，车机软件需要 ≥ 2026.20（低于这个版本功能不正常）。下单/动手前先在车机里确认版本号。</div></details>
+    <details class="kf-q"><summary>REV1.X 和 REV3.X 固件怎么选？</summary><div class="a">看主板 ESP32-P4 芯片的版本：买成品的按卖家标注选；自己买板的看芯片丝印，或直接问板卡卖家。两个版本的固件包不通用，选错刷不上或运行异常。</div></details>
+    <details class="kf-q"><summary>第一次刷机怎么做？</summary><div class="a">用 FULLFLASH 整刷包：电脑 Chrome 打开 ESP 在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选 merged 整刷包从地址 0x0 写入。</div></details>
+    <details class="kf-q"><summary>以后升级固件怎么做？</summary><div class="a">只能用 OTA 包：在模块网页仪表盘的固件更新入口上传 OTA 包，过程不要断电。千万别拿 FULLFLASH 整刷包当更新包刷——这是已知的模块重启故障原因。</div></details>
+    <details class="kf-q"><summary>模块装好后自己重启，怎么回事？</summary><div class="a">先查两件事：①是不是把整刷包当更新包刷了（重刷对应版本的 OTA 包纠正）；②供电是否稳定（12V 转 5V 的降压模块输出不足也会这样）。还不行就留言说明车型和刷的包名。</div></details>
+    <details class="kf-q"><summary>没买 EAP / FSD 能用吗？</summary><div class="a">基础功能可以正常用。但召唤、红绿灯识别（TLSSC）这类功能需要车辆本身已订阅 EAP / FSD 才能生效——本模块只做地区与距离等限制的解锁，不提供任何付费功能的破解。</div></details>
+    <details class="kf-q"><summary>接线难不难？要破线吗？</summary><div class="a">走后排 X179 诊断接头，不用破线。但接线前必须先进车辆服务模式的 CAN Port 页面，逐脚核对针脚对应的总线名称——不同年份线束布局至少有 4 种，不能只按年份猜。详细接线表在本站下载页下方。</div></details>
+    <details class="kf-q"><summary>装这个影响保修吗？</summary><div class="a">安装涉及车辆 CAN 总线操作，特斯拉有可能据此拒绝相关部件的保修，请自行评估后再动手。本站仅提供固件分发与安装说明，与 Tesla, Inc. 无关。</div></details>
+
+    <p class="kf-sec">留言咨询</p>
+    <form class="kf-form" id="kfForm">
+      <label>你的称呼（选填）</label>
+      <input type="text" name="name" placeholder="怎么称呼你">
+      <label>联系邮箱（必填，回复发到这里）</label>
+      <input type="email" name="email" required placeholder="you@example.com">
+      <label>车型 / 车机版本（选填）</label>
+      <input type="text" name="car" placeholder="例：2023 款 Model 3 / 2026.26">
+      <label>问题描述（必填）</label>
+      <textarea name="message" required placeholder="遇到了什么问题？刷的哪个包、哪一步卡住，写得越具体回复越准。"></textarea>
+      <button id="kfSend" type="submit">发送留言</button>
+      <p id="kfMsg"></p>
+    </form>
+  </div>
+</div>
+
 <script>
   document.querySelectorAll('.copy').forEach(function(btn){
     btn.addEventListener('click', function(){
@@ -175,6 +253,48 @@
       if (navigator.clipboard) { navigator.clipboard.writeText(h); }
       btn.textContent = '已复制 ✓';
       setTimeout(function(){ btn.textContent = '复制'; }, 1600);
+    });
+  });
+
+  // ---- support popup ----
+  var kfPanel = document.getElementById('kfPanel');
+  document.getElementById('kfBtn').addEventListener('click', function(){
+    kfPanel.classList.toggle('open');
+  });
+  document.getElementById('kfClose').addEventListener('click', function(){
+    kfPanel.classList.remove('open');
+  });
+  document.getElementById('kfForm').addEventListener('submit', function(ev){
+    ev.preventDefault();
+    var form = ev.target, btn = document.getElementById('kfSend'), msg = document.getElementById('kfMsg');
+    var data = new FormData(form);
+    var payload = {
+      _subject: '888ai.me 客服留言',
+      _template: 'table',
+      _captcha: 'false',
+      '称呼': data.get('name') || '（未留称呼）',
+      '回复邮箱': data.get('email'),
+      '车型车机': data.get('car') || '（未填）',
+      '问题描述': data.get('message')
+    };
+    btn.disabled = true; btn.textContent = '发送中…'; msg.textContent = ''; msg.className = '';
+    fetch('https://formsubmit.co/ajax/zhuchong19910704@gmail.com', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: JSON.stringify(payload)
+    }).then(function(r){ return r.json(); }).then(function(j){
+      if (j.success) {
+        msg.textContent = '已收到！客服会回复到你留的邮箱，请留意收件箱（包括垃圾箱）。';
+        msg.className = 'ok'; form.reset();
+      } else {
+        msg.textContent = '发送失败，请稍后再试一次。';
+        msg.className = 'err';
+      }
+    }).catch(function(){
+      msg.textContent = '网络异常，发送失败，请稍后再试。';
+      msg.className = 'err';
+    }).finally(function(){
+      btn.disabled = false; btn.textContent = '发送留言';
     });
   });
 </script>
