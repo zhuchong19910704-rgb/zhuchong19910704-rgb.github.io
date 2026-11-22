@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-888ai.me（阿童木 P4-CAN 套件）支付宝支付后端。
+888ai.me（阿童木 P4-CAN 套件）支付后端（支付宝 + 微信支付）。
 
 设计：
 - 核心逻辑与 Web 框架无关；运行时优先用 Flask，环境没有 Flask 时
   自动退回标准库 http.server（ThreadingHTTPServer），行为一致。
 - 订单存 SQLite 单文件；金额一律由服务端按档位查表，绝不信任前端。
-- 支付宝 RSA2 签名/验签用 cryptography 库；商户参数全部走环境变量，
+- 支付宝 RSA2 签名/验签、微信 APIv3 签名/验签与 AES-256-GCM 解密
+  用 cryptography 库；商户参数全部走环境变量，
   缺失时支付接口返回 503 配置缺失，不崩溃。
 
 接口：
@@ -15,6 +16,8 @@
   POST /api/order                 建单
   POST /api/pay/alipay            生成支付宝支付 URL（page/wap 按 UA 选）
   POST /api/pay/notify/alipay     支付宝异步回调（验签后置 PAID）
+  POST /api/pay/wechat            微信下单（Native 扫码 / H5 按 UA 选）
+  POST /api/pay/notify/wechat     微信异步回调（验签+解密后置 PAID）
   GET  /api/order/<order_id>      查单（手机号脱敏）
 
 环境变量见 README.md。
@@ -29,9 +32,12 @@ import secrets
 import sqlite3
 import string
 import threading
+import time
 from datetime import datetime
 from decimal import Decimal
+from urllib.error import HTTPError
 from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 # ---------------------------------------------------------------- 日志
 logging.basicConfig(
@@ -85,6 +91,36 @@ def alipay_config():
     return cfg, missing
 
 
+WECHAT_API_BASE = "https://api.mch.weixin.qq.com"
+
+
+def wechat_config():
+    """读取微信商户配置；返回 (cfg, missing_list)。"""
+    cfg = {
+        "mchid": os.environ.get("WECHAT_MCHID", "").strip(),
+        "cert_serial": os.environ.get("WECHAT_CERT_SERIAL", "").strip(),
+        "private_key_path": os.environ.get("WECHAT_PRIVATE_KEY_PATH", "").strip(),
+        "api_v3_key": os.environ.get("WECHAT_API_V3_KEY", "").strip(),
+        "pub_key_id": os.environ.get("WECHAT_PUB_KEY_ID", "").strip(),
+        "pub_key_path": os.environ.get("WECHAT_PUB_KEY_PATH", "").strip(),
+        "notify_url": os.environ.get("WECHAT_NOTIFY_URL", "").strip(),
+    }
+    missing = [
+        name
+        for name, key in (
+            ("WECHAT_MCHID", "mchid"),
+            ("WECHAT_CERT_SERIAL", "cert_serial"),
+            ("WECHAT_PRIVATE_KEY_PATH", "private_key_path"),
+            ("WECHAT_API_V3_KEY", "api_v3_key"),
+            ("WECHAT_PUB_KEY_ID", "pub_key_id"),
+            ("WECHAT_PUB_KEY_PATH", "pub_key_path"),
+            ("WECHAT_NOTIFY_URL", "notify_url"),
+        )
+        if not cfg[key]
+    ]
+    return cfg, missing
+
+
 # ---------------------------------------------------------------- 数据库
 _db_lock = threading.Lock()
 
@@ -99,6 +135,7 @@ CREATE TABLE IF NOT EXISTS orders (
     car             TEXT DEFAULT '',
     status          TEXT NOT NULL DEFAULT 'PENDING',
     alipay_trade_no TEXT DEFAULT '',
+    wechat_transaction_id TEXT DEFAULT '',
     created_at      TEXT NOT NULL,
     paid_at         TEXT DEFAULT ''
 );
@@ -114,6 +151,12 @@ def db_connect():
 def db_init():
     with _db_lock, db_connect() as conn:
         conn.execute(SCHEMA)
+        # 老库迁移：早期订单表没有微信交易号列，补上
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(orders)")]
+        if "wechat_transaction_id" not in cols:
+            conn.execute(
+                "ALTER TABLE orders ADD COLUMN wechat_transaction_id TEXT DEFAULT ''"
+            )
 
 
 def db_get_order(order_id):
@@ -148,6 +191,15 @@ def db_mark_paid(order_id, trade_no):
             "UPDATE orders SET status='PAID', alipay_trade_no=?, paid_at=?"
             " WHERE order_id=?",
             (trade_no, datetime.now().isoformat(timespec="seconds"), order_id),
+        )
+
+
+def db_mark_paid_wechat(order_id, transaction_id):
+    with _db_lock, db_connect() as conn:
+        conn.execute(
+            "UPDATE orders SET status='PAID', wechat_transaction_id=?, paid_at=?"
+            " WHERE order_id=?",
+            (transaction_id, datetime.now().isoformat(timespec="seconds"), order_id),
         )
 
 
@@ -466,9 +518,286 @@ def handle_alipay_notify(form):
     return text_response(200, "success")
 
 
+# ---------------------------------------------------------------- 微信支付（APIv3）
+def wechat_verify_signature(cfg, timestamp, nonce, body_text, signature_b64, serial):
+    """微信支付公钥模式验签：serial 须等于公钥 ID，签名串为 timestamp\\nnonce\\nbody\\n。
+
+    与支付宝同为 RSA PKCS1v15 + SHA256，直接复用 rsa2_verify。
+    """
+    if serial != cfg["pub_key_id"]:
+        log.warning("wechat serial mismatch: %s", serial)
+        return False
+    message = "%s\n%s\n%s\n" % (timestamp, nonce, body_text)
+    return rsa2_verify(message, signature_b64, cfg["pub_key_path"])
+
+
+def wechat_api_post(cfg, path, payload):
+    """带商户证书签名的 APIv3 POST；返回 (status, resp_headers, resp_body_bytes)。
+
+    签名串：POST\\n<path>\\n<timestamp>\\n<nonce>\\n<body>\\n，
+    用商户证书私钥 RSA-SHA256 签名（与支付宝同算法，复用 rsa2_sign）。
+    """
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    timestamp = str(int(time.time()))
+    nonce = secrets.token_hex(16)
+    sign_message = "POST\n%s\n%s\n%s\n%s\n" % (
+        path,
+        timestamp,
+        nonce,
+        body.decode("utf-8"),
+    )
+    signature = rsa2_sign(sign_message, cfg["private_key_path"])
+    authorization = (
+        'WECHATPAY2-SHA256-RSA2048 mchid="%s",nonce_str="%s",timestamp="%s",'
+        'serial_no="%s",signature="%s"'
+        % (cfg["mchid"], nonce, timestamp, cfg["cert_serial"], signature)
+    )
+    req = Request(
+        WECHAT_API_BASE + path,
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": authorization,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "888ai-pay/1.0",
+        },
+    )
+    try:
+        with urlopen(req, timeout=15) as resp:
+            headers = {k.lower(): v for k, v in resp.headers.items()}
+            return resp.status, headers, resp.read()
+    except HTTPError as exc:
+        headers = {k.lower(): v for k, v in exc.headers.items()} if exc.headers else {}
+        return exc.code, headers, exc.read()
+
+
+def handle_wechat_pay(data, user_agent, client_ip):
+    if not isinstance(data, dict):
+        return json_response(400, {"error": "invalid_json"})
+    order_id = str(data.get("order_id", "")).strip()
+    if not order_id:
+        return json_response(400, {"error": "order_id_required"})
+
+    cfg, missing = wechat_config()
+    if missing:
+        return json_response(
+            503,
+            {
+                "error": "wechat_config_missing",
+                "message": "微信商户参数未配置，暂不能支付",
+                "missing": missing,
+            },
+        )
+
+    order = db_get_order(order_id)
+    if not order:
+        return json_response(404, {"error": "order_not_found"})
+    if order["status"] == "PAID":
+        return json_response(409, {"error": "order_already_paid"})
+
+    ua = (user_agent or "").lower()
+    is_mobile = any(k in ua for k in ("mobile", "android", "iphone", "ipad"))
+    payload = {
+        "mchid": cfg["mchid"],
+        "description": SUBJECT_PREFIX + order["tier_name"],
+        "out_trade_no": order["order_id"],
+        "notify_url": cfg["notify_url"],
+        "amount": {"total": order["amount_cents"], "currency": "CNY"},
+    }
+    if is_mobile:
+        path = "/v3/pay/transactions/h5"
+        payload["scene_info"] = {
+            "payer_client_ip": client_ip or "127.0.0.1",
+            "h5_info": {"type": "Wap"},
+        }
+    else:
+        path = "/v3/pay/transactions/native"
+
+    try:
+        status, resp_headers, resp_body = wechat_api_post(cfg, path, payload)
+    except ImportError:
+        return json_response(
+            503,
+            {
+                "error": "crypto_dependency_missing",
+                "message": "服务器缺少 cryptography 库，无法签名（pip install cryptography）",
+            },
+        )
+    except Exception as exc:
+        log.error("wechat api request failed: %s", exc)
+        return json_response(502, {"error": "wechat_api_unreachable"})
+
+    body_text = resp_body.decode("utf-8", "replace")
+    if status != 200:
+        wx_code, wx_msg = "", body_text[:200]
+        try:
+            err = json.loads(body_text)
+            wx_code = err.get("code", "")
+            wx_msg = err.get("message", wx_msg)
+        except Exception:
+            pass
+        log.error("wechat api error: http=%s code=%s msg=%s", status, wx_code, wx_msg)
+        return json_response(
+            502, {"error": "wechat_api_error", "wechat_code": wx_code, "message": wx_msg}
+        )
+
+    # 应答验签（微信支付公钥模式）：验不过视为不可信应答，不把链接交给前端
+    if not wechat_verify_signature(
+        cfg,
+        resp_headers.get("wechatpay-timestamp", ""),
+        resp_headers.get("wechatpay-nonce", ""),
+        body_text,
+        resp_headers.get("wechatpay-signature", ""),
+        resp_headers.get("wechatpay-serial", ""),
+    ):
+        log.error("wechat response verify FAILED for order %s", order_id)
+        return json_response(502, {"error": "wechat_response_verify_failed"})
+
+    try:
+        result = json.loads(body_text)
+    except Exception:
+        return json_response(502, {"error": "wechat_api_bad_response"})
+    amount_str = cents_to_yuan_str(order["amount_cents"])
+    if is_mobile:
+        h5_url = result.get("h5_url", "")
+        if not h5_url:
+            return json_response(502, {"error": "wechat_api_bad_response"})
+        return json_response(
+            200,
+            {
+                "order_id": order["order_id"],
+                "amount": amount_str,
+                "pay_type": "h5",
+                "h5_url": h5_url,
+            },
+        )
+    code_url = result.get("code_url", "")
+    if not code_url:
+        return json_response(502, {"error": "wechat_api_bad_response"})
+    return json_response(
+        200,
+        {
+            "order_id": order["order_id"],
+            "amount": amount_str,
+            "pay_type": "native",
+            "code_url": code_url,
+        },
+    )
+
+
+def wechat_fail(status, message):
+    return json_response(status, {"code": "FAIL", "message": message})
+
+
+def handle_wechat_notify(raw_body, headers):
+    """微信支付异步通知：headers 为小写 key 的 dict，raw_body 为请求体原文。
+
+    流程：微信支付公钥验签 → APIv3 密钥 AES-256-GCM 解密 resource →
+    校验商户号/订单/金额/trade_state → 置 PAID（幂等）。
+    """
+    cfg, missing = wechat_config()
+    if missing:
+        log.error("wechat notify received but config missing: %s", missing)
+        return wechat_fail(500, "微信支付配置缺失")
+
+    timestamp = headers.get("wechatpay-timestamp", "")
+    nonce = headers.get("wechatpay-nonce", "")
+    signature = headers.get("wechatpay-signature", "")
+    serial = headers.get("wechatpay-serial", "")
+    if not (timestamp and nonce and signature and serial):
+        log.warning("wechat notify missing signature headers")
+        return wechat_fail(401, "签名头缺失")
+    try:
+        if abs(int(time.time()) - int(timestamp)) > 300:
+            log.warning("wechat notify timestamp too old: %s", timestamp)
+            return wechat_fail(401, "通知已过期")
+    except ValueError:
+        return wechat_fail(401, "时间戳非法")
+
+    try:
+        body_text = raw_body.decode("utf-8")
+    except Exception:
+        return wechat_fail(400, "请求体非法")
+    if not wechat_verify_signature(cfg, timestamp, nonce, body_text, signature, serial):
+        log.warning("wechat notify verify FAILED")
+        return wechat_fail(401, "签名验证失败")
+
+    try:
+        resource = json.loads(body_text)["resource"]
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+        key = cfg["api_v3_key"].encode("utf-8")
+        if len(key) != 32:
+            log.error("WECHAT_API_V3_KEY is not 32 bytes")
+            return wechat_fail(500, "APIv3 密钥配置错误")
+        plaintext = AESGCM(key).decrypt(
+            resource["nonce"].encode("utf-8"),
+            base64.b64decode(resource["ciphertext"]),
+            (resource.get("associated_data") or "").encode("utf-8"),
+        )
+        plain = json.loads(plaintext.decode("utf-8"))
+    except ImportError:
+        return wechat_fail(500, "服务器缺少 cryptography 库")
+    except Exception as exc:
+        log.warning("wechat notify decrypt/parse failed: %s", exc)
+        return wechat_fail(400, "通知解密失败")
+
+    if plain.get("mchid") != cfg["mchid"]:
+        log.warning("wechat notify mchid mismatch: %s", plain.get("mchid"))
+        return wechat_fail(400, "商户号不符")
+
+    order_id = plain.get("out_trade_no", "")
+    order = db_get_order(order_id)
+    if not order:
+        log.warning("wechat notify unknown order: %s", order_id)
+        return wechat_fail(400, "订单不存在")
+
+    total = (plain.get("amount") or {}).get("total")
+    if total != order["amount_cents"]:
+        log.warning(
+            "wechat notify amount mismatch: order=%s expected=%s got=%s",
+            order_id,
+            order["amount_cents"],
+            total,
+        )
+        return wechat_fail(400, "金额不符")
+
+    if plain.get("trade_state") != "SUCCESS":
+        log.info(
+            "wechat notify ignored state %s for order %s",
+            plain.get("trade_state"),
+            order_id,
+        )
+        return json_response(200, {"code": "SUCCESS", "message": "成功"})
+
+    if order["status"] == "PAID":
+        log.info("wechat notify duplicate for paid order: %s", order_id)
+        return json_response(200, {"code": "SUCCESS", "message": "成功"})
+    db_mark_paid_wechat(order_id, plain.get("transaction_id", ""))
+    log.info(
+        "order PAID via wechat: %s transaction_id=%s amount=%s",
+        order_id,
+        plain.get("transaction_id"),
+        total,
+    )
+    return json_response(200, {"code": "SUCCESS", "message": "成功"})
+
+
 # ---------------------------------------------------------------- 路由分发（框架无关）
-def dispatch(method, path, json_body=None, form=None, user_agent=""):
-    """返回 (status, content_type, body_bytes)。"""
+def dispatch(
+    method,
+    path,
+    json_body=None,
+    form=None,
+    user_agent="",
+    headers=None,
+    raw_body=b"",
+    remote_addr="",
+):
+    """返回 (status, content_type, body_bytes)。headers 统一转小写 key。"""
+    headers = {str(k).lower(): v for k, v in (headers or {}).items()}
+    client_ip = headers.get("x-forwarded-for", "").split(",")[0].strip() or remote_addr
     if method == "GET" and path == "/api/health":
         return handle_health()
     if method == "POST" and path == "/api/order":
@@ -477,6 +806,10 @@ def dispatch(method, path, json_body=None, form=None, user_agent=""):
         return handle_alipay_pay(json_body, user_agent)
     if method == "POST" and path == "/api/pay/notify/alipay":
         return handle_alipay_notify(form or {})
+    if method == "POST" and path == "/api/pay/wechat":
+        return handle_wechat_pay(json_body, user_agent, client_ip)
+    if method == "POST" and path == "/api/pay/notify/wechat":
+        return handle_wechat_notify(raw_body or b"", headers)
     m = re.fullmatch(r"/api/order/([A-Za-z0-9_-]+)", path or "")
     if method == "GET" and m:
         return handle_get_order(m.group(1))
@@ -490,6 +823,7 @@ def run_flask():
     app = Flask(__name__)
 
     def _handle(**_view_args):
+        raw_body = request.get_data(cache=True) or b""
         json_body = None
         if request.is_json:
             json_body = request.get_json(silent=True)
@@ -500,6 +834,9 @@ def run_flask():
             json_body=json_body,
             form=form,
             user_agent=request.headers.get("User-Agent", ""),
+            headers=dict(request.headers),
+            raw_body=raw_body,
+            remote_addr=request.remote_addr or "",
         )
         return app.response_class(body, status=status, content_type=ctype)
 
@@ -508,6 +845,8 @@ def run_flask():
     app.add_url_rule("/api/order/<order_id>", view_func=_handle, methods=["GET"])
     app.add_url_rule("/api/pay/alipay", view_func=_handle, methods=["POST"])
     app.add_url_rule("/api/pay/notify/alipay", view_func=_handle, methods=["POST"])
+    app.add_url_rule("/api/pay/wechat", view_func=_handle, methods=["POST"])
+    app.add_url_rule("/api/pay/notify/wechat", view_func=_handle, methods=["POST"])
 
     log.info("starting Flask mode on %s:%s (db=%s)", HOST, PORT, DB_PATH)
     app.run(host=HOST, port=PORT, threaded=True)
@@ -556,6 +895,9 @@ def run_stdlib():
                 json_body=json_body,
                 form=form,
                 user_agent=self.headers.get("User-Agent", ""),
+                headers=dict(self.headers.items()),
+                raw_body=raw,
+                remote_addr=self.client_address[0],
             )
             self._respond(status, resp_ctype, body)
 
