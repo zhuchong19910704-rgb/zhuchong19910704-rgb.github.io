@@ -267,6 +267,9 @@
   .msg{max-width:88%; padding:9px 12px; border-radius:13px; font-size:13.5px; line-height:1.65; white-space:pre-line}
   .msg.bot{align-self:flex-start; background:rgba(34,211,238,.09); border:1px solid rgba(34,211,238,.22); border-bottom-left-radius:4px}
   .msg.me{align-self:flex-end; background:linear-gradient(92deg, rgba(34,211,238,.9), rgba(45,212,191,.9)); color:#031018; border-bottom-right-radius:4px; font-weight:600}
+  .msg.agent{align-self:flex-start; background:rgba(250,190,60,.13); border:1px solid rgba(250,190,60,.5); border-bottom-left-radius:4px}
+  .msg .who{display:block; font-size:11px; font-weight:700; letter-spacing:.06em; opacity:.85; margin-bottom:2px}
+  .msg.agent .who{color:#fabe3c}
   .chat-chips{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 8px}
   .qc{background:rgba(255,255,255,.05); border:1px solid var(--line); color:var(--dim); border-radius:999px; padding:6px 11px; font-size:12.5px; cursor:pointer; font-family:inherit}
   .qc:hover{color:var(--txt); border-color:rgba(34,211,238,.5)}
@@ -512,12 +515,12 @@
 <div id="kfPanel" role="dialog" aria-label="在线客服">
   <div class="kf-head">
     <h3><span class="dot"></span>在线客服 · 智能答疑</h3>
-    <p>直接打字问，秒回；答不了的在下方留个手机号，客服尽快联系你。</p>
+    <p>直接打字问，智能客服秒回；店主在线时（8:00–23:00）也会在这里亲自回复，约 1 分钟。</p>
     <button class="kf-x" id="kfClose" aria-label="关闭">×</button>
   </div>
   <div class="kf-body">
     <div class="chat-log" id="chatLog">
-      <div class="msg bot">你好，我是 888ai.me 智能客服。价格、适配、刷机、保修都可以直接问我，秒回。</div>
+      <div class="msg bot">你好，我是 888ai.me 智能客服。价格、适配、刷机、保修都可以直接问我，秒回。你发的消息店主也能看到，在线时会直接在这里回你。</div>
     </div>
     <div class="chat-chips">
       <button type="button" class="qc">套件多少钱？</button>
@@ -560,9 +563,10 @@
 
   // ---- support popup ----
   var kfPanel = document.getElementById('kfPanel');
-  function openKf(){ kfPanel.classList.add('open'); }
+  function openKf(){ kfPanel.classList.add('open'); startPoll(); }
   document.getElementById('kfBtn').addEventListener('click', function(){
     kfPanel.classList.toggle('open');
+    if (kfPanel.classList.contains('open')) startPoll();
   });
   document.getElementById('navKf').addEventListener('click', openKf);
   document.getElementById('kfClose').addEventListener('click', function(){
@@ -582,7 +586,7 @@
     {k:['保修','质保'], a:'先说结论：整车还在特斯拉基本保修期内（4 年或 8 万公里，以先到为准）的，建议先别装，等出保后再考虑。安装涉及车辆 CAN 总线操作，特斯拉有可能据此拒绝相关部件甚至整车保修；已出保的车辆也请自行评估风险。'},
     {k:['版本','2026','能用','适配','车型','model'], a:'适用于 Model 3 / Y，车机软件需要 ≥ 2026.20。低于 2026.20 功能不正常、不能用，请先升级车机。下单前先在车机里确认版本号。'},
     {k:['下单','购买','支付','付款','发货','怎么买'], a:'下单方式：在本站价格区点对应档位的「留言下单」，或在下方表单留手机号并注明车型年份和已购订阅档位，客服确认适配后联系你付款发货。目前是人工确认下单，在线支付接入中。'},
-    {k:['电话','微信','联系','人工','真人'], a:'需要人工的话，在下方表单留手机号（微信号选填），客服会尽快联系你。'},
+    {k:['电话','微信','联系','人工','真人'], a:'店主在线（8:00–23:00）时就在这个对话里直接回复你，约 1 分钟，不用跳出去。想留个联系方式慢慢聊，也可以在下方表单留手机号或微信号，店主会加你。'},
     {k:['你好','您好','在吗','hi','hello'], a:'你好，我是 888ai.me 智能客服。价格、适配、刷机、保修都可以直接问我。'}
   ];
   function botAnswer(q){
@@ -592,7 +596,7 @@
         if (s.indexOf(QA[i].k[j]) !== -1) return QA[i].a;
       }
     }
-    return '这个问题我暂时答不上来，别急——在下方表单留个手机号、把问题写清楚，客服会尽快联系你。也可以换个说法再问我，比如「多少钱」「我的车能用吗」「怎么刷机」。';
+    return '这个问题我暂时答不上来，别急——你的消息店主能看到，在线时（8:00–23:00）会直接在这里回复你。急的话在下方表单留个手机号，店主电话联系你。也可以换个说法再问我，比如「多少钱」「我的车能用吗」「怎么刷机」。';
   }
   var chatLog = document.getElementById('chatLog'), chatText = document.getElementById('chatText');
   function addMsg(text, cls){
@@ -601,15 +605,86 @@
     chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight;
     return d;
   }
+  var myMsgCount = 0, leadShown = false;
+  try { leadShown = !!localStorage.getItem('p4chat_lead'); } catch (e) {}
   function askChat(q){
     q = (q || '').trim(); if (!q) return;
     addMsg(q, 'me'); chatText.value = '';
+    relaySend(q);
+    myMsgCount++;
     var t = addMsg('正在输入…', 'bot');
-    setTimeout(function(){ t.textContent = botAnswer(q); chatLog.scrollTop = chatLog.scrollHeight; }, 450);
+    setTimeout(function(){
+      t.textContent = botAnswer(q); chatLog.scrollTop = chatLog.scrollHeight;
+      if (myMsgCount === 2 && !leadShown) {
+        leadShown = true;
+        try { localStorage.setItem('p4chat_lead', '1'); } catch (e) {}
+        addMsg('想直接跟店主一对一聊？在下方表单留个微信号或手机号，店主加你——确认适配、下单、刷机指导都能直接对接，不用在这儿等。', 'bot');
+      }
+    }, 450);
   }
   document.getElementById('chatSend').addEventListener('click', function(){ askChat(chatText.value); });
   chatText.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); askChat(chatText.value); } });
   document.querySelectorAll('.qc').forEach(function(b){ b.addEventListener('click', function(){ askChat(b.textContent); }); });
+
+  // ---- live relay: customer messages reach the owner; owner replies appear here ----
+  var sid = null;
+  try { sid = localStorage.getItem('p4chat_sid'); } catch (e) {}
+  if (!sid) {
+    sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('s' + Date.now() + Math.random().toString(36).slice(2, 10));
+    try { localStorage.setItem('p4chat_sid', sid); } catch (e) {}
+  }
+  var relayBuf = [], relayTimer = null;
+  function relaySend(text){
+    relayBuf.push(text);
+    if (relayTimer) clearTimeout(relayTimer);
+    relayTimer = setTimeout(flushRelay, 2500);
+    if (relayBuf.length >= 3) flushRelay();
+  }
+  function flushRelay(){
+    if (relayTimer) { clearTimeout(relayTimer); relayTimer = null; }
+    if (!relayBuf.length) return;
+    var texts = relayBuf.slice(); relayBuf = [];
+    fetch('https://formsubmit.co/ajax/b0ef0f17851c76891649d7ab453f25a5', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: JSON.stringify({
+        _subject: '888ai.me 在线聊天',
+        _template: 'table',
+        _captcha: 'false',
+        '会话ID': sid,
+        '消息内容': texts.join('\n'),
+        '页面': location.href
+      })
+    }).catch(function(){});
+  }
+  var seenTs = 0;
+  try { seenTs = Number(localStorage.getItem('p4chat_seen_' + sid) || 0); } catch (e) {}
+  function addAgentMsg(m){
+    var d = document.createElement('div');
+    d.className = 'msg agent';
+    var w = document.createElement('span'); w.className = 'who'; w.textContent = '店主';
+    d.appendChild(w);
+    d.appendChild(document.createTextNode(m.text));
+    chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight;
+  }
+  function pollReplies(){
+    fetch('https://raw.githubusercontent.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/main/chat/' + sid + '.json?t=' + Date.now(), {cache: 'no-store'})
+      .then(function(r){ if (!r.ok) throw 0; return r.json(); })
+      .then(function(j){
+        var msgs = (j && j.messages) || [], changed = false;
+        msgs.sort(function(a, b){ return a.ts - b.ts; });
+        for (var i = 0; i < msgs.length; i++){
+          if (msgs[i].from === 'agent' && msgs[i].ts > seenTs) { addAgentMsg(msgs[i]); seenTs = msgs[i].ts; changed = true; }
+        }
+        if (changed) { try { localStorage.setItem('p4chat_seen_' + sid, String(seenTs)); } catch (e) {} }
+      }).catch(function(){});
+  }
+  var pollStarted = false;
+  function startPoll(){
+    if (pollStarted) return; pollStarted = true;
+    pollReplies();
+    setInterval(pollReplies, 5000);
+  }
 
   // ---- order buttons: open popup with the chosen plan prefilled ----
   document.querySelectorAll('.buy').forEach(function(b){
