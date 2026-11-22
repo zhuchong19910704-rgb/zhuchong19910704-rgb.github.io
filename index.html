@@ -441,6 +441,28 @@
         <p class="howto">升级方法：在模块的网页仪表盘里找到固件更新入口，上传 OTA 包即可，不要断电。</p>
       </div>
     </div>
+
+    <p class="pgroup" style="margin-top:34px">一体板方案 · T2CAN（同作者第二条产品线）</p>
+    <p class="sec-sub">固件跑在 <strong>LilyGO T-2CAN 一体板</strong>上：双路 CAN、收发器、电源全集成在一块板上，螺丝端子接线、免焊接，12V 直供，整块板约 91×39mm、好藏。中文版固件 v3.30.3，<strong>只刷一个包，装车后在面板里选车型配置</strong>。注意：仅适配<strong>标准版 H784</strong>，FD 版（H784-A）不适用。</p>
+    <div class="dlgrid">
+      <div class="dlc">
+        <span class="tag">T2CAN · FIRST FLASH</span>
+        <h3>T2CAN 第一次刷机 · 整刷包</h3>
+        <p class="dsub">空白 T-2CAN 板第一次刷机用，USB-C 连电脑整体写入。</p>
+        <a class="dl" href="https://github.com/06066060606060/t2can-universal-unlock/releases/download/3.30.3/T2CAN-Universal-v3.30.3-LP_YL.zh-CN.FULLFLASH.merged.bin"><span>⬇ T2CAN 整刷包</span><span class="size">16 MB</span></a>
+        <div class="hash"><span class="lbl">SHA-256</span><code>4e512f7ea12a79a24ef4edfad598b9de178155cb33ce931c8d7c79ca4b51bff5</code><button class="copy" data-hash="4e512f7ea12a79a24ef4edfad598b9de178155cb33ce931c8d7c79ca4b51bff5">复制</button></div>
+        <p class="howto">刷机方法：同上方在线刷机工具，选 merged 整刷包从地址 0x0 写入；装车后先在面板里选对车型配置，没选配置不开机。</p>
+      </div>
+      <div class="dlc ota">
+        <span class="tag">T2CAN · OTA UPDATE · 永久免费</span>
+        <h3>T2CAN 后续升级 · OTA 包</h3>
+        <p class="dsub">已装好的 T2CAN 模块升级用，在模块网页仪表盘里上传。</p>
+        <a class="dl ota" href="https://github.com/06066060606060/t2can-universal-unlock/releases/download/3.30.3/T2CAN-Universal-v3.30.3-LP_YL.zh-CN.OTA.bin"><span>⬇ T2CAN OTA 包</span><span class="size">≈1.5 MB</span></a>
+        <div class="hash"><span class="lbl">SHA-256</span><code>6a41c7e1e84b8a2271d5ef7ea678720348e3700ec826112cbf4bc08ba1d9ae20</code><button class="copy" data-hash="6a41c7e1e84b8a2271d5ef7ea678720348e3700ec826112cbf4bc08ba1d9ae20">复制</button></div>
+        <p class="howto">取舍提醒：标准 Model 3/Y 只接两路总线，杀手模式与高级 EAP 按接法二选一；Model YL 全功能；另独有 Model S/X（MCU2）支持。不确定选哪个配置，先问客服。</p>
+      </div>
+    </div>
+    <p class="pnote">T2CAN 一体板套件（板 + X179 线束 + 天线）<strong>实测中、即将上架</strong>。想要一体板的，点右下角客服留言登记，上架第一时间通知。</p>
   </section>
 
   <!-- PRICE -->
@@ -463,7 +485,7 @@
       <div class="tier"><div class="tn">FSD 版</div><div class="tp">¥699</div><p class="td">车已购 FSD：同老款 FSD 版功能集。</p><button class="buy" data-plan="新款 FSD版 ¥699">留言下单</button></div>
     </div>
 
-    <p class="pnote">点「留言下单」会打开客服窗口并自动填好你选的档位，确认适配后再付款发货。<br>所有档位均含 <span class="gold">永久免费 OTA 升级</span> · 固件免费下载自刷 · 后续更新免费</p>
+    <p class="pnote">点「留言下单」会打开客服窗口并自动填好你选的档位，确认适配后再付款发货。<br>所有档位均含 <span class="gold">永久免费 OTA 升级</span> · 固件免费下载自刷 · 后续更新免费<br>另有<strong>一体板方案 T2CAN</strong>（见上方固件区）：套件实测中、即将上架，可先留言登记。</p>
   </section>
 
   <!-- WIRING -->
@@ -473,7 +495,7 @@
     <p class="sec-sub">详细版随货附带，这里先看关键的几条——尤其第一条，不能省。</p>
     <div class="tcard">
       <table>
-        <tr><th>车侧接头</th><td>X179 诊断接头，后排中央扶手后方饰板内（2021–2023 款为 20 针版）</td></tr>
+        <tr><th>车侧接头</th><td>X179 诊断接头：老款在后排中央扶手后方饰板内（2021–2023 款为 20 针版）；老款也可走副驾脚窝处中控台侧饰板后的对插口（与加装仪表同一位置，空腔大、模块好藏）；新款取点在前排副驾侧</td></tr>
         <tr><th>必做核对</th><td>接线前先进车辆服务模式 → CAN Port 页面，逐脚核对针脚对应的总线名称——不同线束布局至少有 4 种，不能只按年份猜</td></tr>
         <tr><th>三路总线</th><td>Party（2/3 脚）、Vehicle（9/10 脚）、Chassis（13/14 脚）；1 脚 +12V、20 脚 GND（以服务模式页面实测为准）</td></tr>
         <tr><th>主板接线</th><td><span class="mono">CAN1 TX GPIO20 / RX GPIO21 · CAN2 TX GPIO22 / RX GPIO23 · CAN3 TX GPIO26 / RX GPIO27</span></td></tr>
@@ -575,6 +597,9 @@
     {k:['版本','2026','能用','适配','车型','model'], a:'适用于 Model 3 / Y，车机软件需要 ≥ 2026.20。低于 2026.20 功能不正常、不能用，请先升级车机。下单前先在车机里确认版本号。'},
     {k:['下单','购买','支付','付款','发货','怎么买'], a:'下单方式：在本站价格区点对应档位的「留言下单」，或在下方表单留手机号并注明车型年份和已购订阅档位，客服确认适配后联系你付款发货。目前是人工确认下单，在线支付接入中。'},
     {k:['电话','微信','联系','人工','真人'], a:'店主在线（8:00–23:00）时就在这个对话里直接回复你，约 1 分钟，不用跳出去。想留个联系方式慢慢聊，也可以在下方表单留手机号或微信号，店主会加你。'},
+    {k:['变道','匝道','noa'], a:'高速上自己变道下匝道是 NOA 的活，得车本身买了 EAP 才有——模块只解锁限制，不给功能本体。模块自带的实验变道是基础 AP 下打转向灯辅助变道，定位是非高速场景，别当 NOA 用。'},
+    {k:['饰板','放哪','藏哪','装哪'], a:'可以放饰板里，不用露在外面：P4 方案接后排中央扶手后方的 X179 口，那个口本身就在饰板内；老款车也可以走副驾脚窝中控台侧饰板后的对插口（和加装仪表同一个位置），空腔更大、更好藏。都不用破线。'},
+    {k:['t2','一体板','t-2can','lilygo'], a:'有，T2CAN 是同作者的一体板方案：一块 LilyGO T-2CAN 板集成双路 CAN 和电源，螺丝端子免焊接、12V 直供，比 P4 散件好装好藏。固件 v3.30.3 中文版已在本站固件区免费下载（只适配标准版 H784，FD 版不行）。套件实测中、即将上架，可先在下方表单留言登记。注意：标准 Model 3/Y 只接两路总线，杀手模式和高级 EAP 按接法二选一；它还独有 Model S/X（MCU2）支持。'},
     {k:['你好','您好','在吗','hi','hello'], a:'你好，我是阿童木智能客服。价格、适配、刷机、保修都可以直接问我。'}
   ];
   function botAnswer(q){
