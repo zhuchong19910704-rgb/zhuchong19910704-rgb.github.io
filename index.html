@@ -633,29 +633,27 @@
     sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('s' + Date.now() + Math.random().toString(36).slice(2, 10));
     try { localStorage.setItem('p4chat_sid', sid); } catch (e) {}
   }
-  var relayBuf = [], relayTimer = null;
   function relaySend(text){
-    relayBuf.push(text);
-    if (relayTimer) clearTimeout(relayTimer);
-    relayTimer = setTimeout(flushRelay, 2500);
-    if (relayBuf.length >= 3) flushRelay();
+    postChat(text, 0);
   }
-  function flushRelay(){
-    if (relayTimer) { clearTimeout(relayTimer); relayTimer = null; }
-    if (!relayBuf.length) return;
-    var texts = relayBuf.slice(); relayBuf = [];
+  function postChat(text, attempt){
     fetch('https://formsubmit.co/ajax/b0ef0f17851c76891649d7ab453f25a5', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      keepalive: true,
       body: JSON.stringify({
         _subject: '888ai.me 在线聊天',
         _template: 'table',
         _captcha: 'false',
         '会话ID': sid,
-        '消息内容': texts.join('\n'),
+        '消息内容': text,
         '页面': location.href
       })
-    }).catch(function(){});
+    }).then(function(r){
+      if (!r.ok && attempt < 1) setTimeout(function(){ postChat(text, attempt + 1); }, 4000);
+    }).catch(function(){
+      if (attempt < 1) setTimeout(function(){ postChat(text, attempt + 1); }, 4000);
+    });
   }
   var seenTs = 0;
   try { seenTs = Number(localStorage.getItem('p4chat_seen_' + sid) || 0); } catch (e) {}
