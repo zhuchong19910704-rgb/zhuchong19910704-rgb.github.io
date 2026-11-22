@@ -1,6 +1,7 @@
-# 888ai.me 支付后端（支付宝 + 微信支付）
+# 888ai.me 支付后端（支付宝 + 微信支付）+ 商城 v1
 
 阿童木 P4-CAN 套件销售站的支付后端：建单、拉起支付宝/微信支付、异步回调验签置单、查单。两条通道共用同一套订单表与订单号。
+2026-11-22 起同进程承载商城 v1：买家账号（手机号 + 密码）、收货地址与地址簿、履约状态与快递追踪、卖家后台、离线二维码接口（`GET /api/qr`，纯标准库 QR 编码，前端渲染微信扫码图不依赖任何 CDN）。
 独立进程跑在 ECS 上监听 `127.0.0.1:9000`，由 nginx 把 `/api/` 反代过来（见 `nginx-api.conf.example`），静态站其余部分不受影响。
 
 ## 文件
@@ -33,10 +34,12 @@ python3 app.py                    # 默认监听 127.0.0.1:9000
 
 ### POST /api/order
 ```json
-{"tier": "legacy_basic", "phone": "13800000000", "wechat": "可选", "car": "可选"}
+{"tier": "legacy_basic", "phone": "13800000000", "recipient": "张三",
+ "province": "浙江省", "city": "台州市", "district": "仙居县",
+ "address_detail": "某街道 1 号", "wechat": "可选", "car": "可选"}
 ```
-→ `201 {"order_id": "AT2026...", "amount": "399.00", "status": "PENDING", ...}`
-手机号须为 11 位大陆号码；档位非法返回 400。
+→ `201 {"order_id": "AT2026...", "amount": "399.00", "status": "PENDING", "fulfillment_status": "AWAITING_PAYMENT", ...}`
+手机号须为 11 位大陆号码；档位非法返回 400。**收货人 + 详细地址必填**，缺失返回 `400 {"error": "address_required", "missing": [...]}`（站内客服留言表单不走这个接口，不受影响）。带买家会话 Cookie 下单时自动关联账号，并把地址存进该用户的地址簿（相同地址不重复存，无默认地址时自动设为默认）。
 
 ### POST /api/pay/alipay
 ```json
@@ -64,7 +67,33 @@ python3 app.py                    # 默认监听 127.0.0.1:9000
 微信支付异步回调（JSON POST）。后端先用微信支付公钥验签（请求头 `Wechatpay-Serial` 须等于公钥 ID，并校验时间戳 5 分钟内），再用 APIv3 密钥 AES-256-GCM 解密 `resource`，校验商户号、`out_trade_no`、金额与订单一致且 `trade_state=SUCCESS` 时把订单置 `PAID` 并记录微信交易号，返回 `200 {"code": "SUCCESS", "message": "成功"}`；验签失败返回 `401`、解密或业务校验失败返回 `400`，均为 `{"code": "FAIL", ...}`。重复通知（订单已 PAID）直接返回 SUCCESS，幂等。
 
 ### GET /api/order/<order_id>
-→ `{"order_id": ..., "amount": "399.00", "status": "PENDING|PAID", "phone": "138****0000", ...}`，手机号脱敏，不暴露全号。
+→ `{"order_id": ..., "amount": "399.00", "status": "PENDING|PAID", "fulfillment_status": ..., "phone": "138****0000", ...}`，手机号脱敏，不返回收货人/地址等字段。
+
+### 商城：买家账号（会话 Cookie `p4session`，HttpOnly，30 天）
+- `POST /api/register` `{phone, password}` → 201 + 用户信息；手机号格式非法 400、密码 <6 位 400、已注册 409。密码只存 `pbkdf2_hmac(sha256, 20 万次, 随机盐)` 哈希。
+- `POST /api/login` `{phone, password}` → 200 + Cookie；凭证错误统一 401（不区分号不存在/密码错）。
+- `POST /api/logout` → 注销当前会话。
+- `GET /api/me` → 当前用户；未登录 401。
+- `GET /api/my/orders`（需登录）→ 本人订单列表：含履约状态、快递公司/单号、完整收货地址、状态时间线（timeline）。
+- `GET /api/my/addresses`（需登录）→ 地址簿列表（默认地址在前）。
+- `POST /api/my/addresses`（需登录）→ 新增地址（收货人+详细地址必填，可带 `is_default`）。
+- `POST /api/my/addresses/<id>/default`（需登录）→ 设默认地址。
+- `DELETE /api/my/addresses/<id>`（需登录）→ 删除地址。
+
+### GET /api/track/<order_id>?phone=
+游客订单追踪：`phone` 传下单手机号后四位（或全号）。订单不存在 404、缺 phone 400、不匹配 403。只返回状态节点时间线、快递公司+单号与省/市（城市级），**不返回详细地址与收货人**。
+
+履约状态机：`AWAITING_PAYMENT 待付款 → PAID 付款成功（待发货） → PREPARING 备货中 → SHIPPED 已发货 → IN_TRANSIT 运输中 → DELIVERED 已签收 → COMPLETED 已完成`，旁路 `AFTER_SALE 售后中`。两个支付回调把订单置 PAID 时联动把 `fulfillment_status` 从 AWAITING_PAYMENT 置 PAID。
+
+### 商城：卖家后台（需环境变量 ADMIN_TOKEN，未配置时全部后台接口 503）
+- `POST /api/admin/login` `{token}` → 校验通过换后台会话 Cookie `p4admin`（12 小时）；其余后台接口也接受 `Authorization: Bearer <ADMIN_TOKEN>`。
+- `GET /api/admin/session` → `{"admin": true|false}`。
+- `POST /api/admin/logout` → 注销后台会话。
+- `GET /api/admin/orders?status=<履约状态>` → 全部订单（倒序），含**完整电话、微信号、车型与收货地址**（仅后台可见）。
+- `POST /api/admin/order/<order_id>/fulfillment` `{fulfillment_status?, courier?, tracking_no?}` → 改履约状态/快递并刷新 `status_updated_at`；状态非法 400。
+
+### GET /api/qr?text=
+离线生成 QR 二维码 PNG（字节模式、ECC-M、版本 1–10，纯标准库实现，无任何外部依赖）。前端把微信 Native 的 `code_url` 传进来渲染扫码图。文本 UTF-8 超过 213 字节返回 400。
 
 ### GET /api/health
 → `{"ok": true}`，存活探针。
@@ -93,6 +122,10 @@ python3 app.py                    # 默认监听 127.0.0.1:9000
 
 | `ORDERS_DB_PATH` | 否 | 默认 `server/orders.db`，生产建议 `/var/lib/p4can/orders.db` |
 | `PAY_HOST` / `PAY_PORT` | 否 | 默认 `127.0.0.1` / `9000`，不要改成对外监听 |
+| `ADMIN_TOKEN` | 商城后台必填 | 卖家后台口令（长随机串，只写 pay.env，禁止进 git/日志）；未配置时 `/api/admin/*` 一律 503 |
+| `COOKIE_SECURE` | 否 | 置 `1` 时会话 Cookie 加 `Secure` 属性（生产 HTTPS 建议开启） |
+
+> 商城数据表（users / sessions / addresses）与 orders 新列（user_id、recipient、province、city、district、address_detail、fulfillment_status、courier、tracking_no、status_updated_at）由服务启动时自动建表/ALTER 迁移，老库可直接升级；存量已付款订单的 fulfillment_status 会回填为 PAID。
 
 ## 部署步骤（ECS）
 
@@ -119,7 +152,7 @@ cd server
 ORDERS_DB_PATH=/tmp/test-orders.db PAY_PORT=19090 python3 app.py &
 curl -s http://127.0.0.1:19090/api/health
 curl -s -X POST http://127.0.0.1:19090/api/order -H 'Content-Type: application/json' \
-  -d '{"tier":"legacy_basic","phone":"13800000000","car":"2023 Model 3"}'
+  -d '{"tier":"legacy_basic","phone":"13800000000","recipient":"张三","address_detail":"某街道 1 号","car":"2023 Model 3"}'
 curl -s http://127.0.0.1:19090/api/order/<上一步的 order_id>
 curl -s -X POST http://127.0.0.1:19090/api/pay/alipay -H 'Content-Type: application/json' \
   -d '{"order_id":"<order_id>"}'   # 无商户参数时应返回 503 alipay_config_missing
@@ -172,3 +205,13 @@ curl -s -X POST http://127.0.0.1:19090/api/pay/alipay -H 'Content-Type: applicat
 - 支付宝回归：page/wap 按 UA 切换、pay_url 签名独立验签通过、模拟回调置 PAID、重复回调幂等、金额篡改被拒 ✅
 
 测试用订单库、假密钥与测试 AppID 均在 /tmp / 进程内存，未进仓库；未调用微信生产接口。
+
+**第五轮：商城 v1（2026-11-22，本地离线自测，未调用任何生产接口）**
+
+新增可复跑测试脚本（`server/tests/`）：
+
+- `tests/test_qr.py`（13/13）：纯标准库 QR 编码器与参考库 `qrcode`（仅测试预言机）逐格比对——格式/版本信息位常数、7 个载荷（11–200 字节，覆盖 V1/V2/V3/V4/V7/V10）在同版本+同掩码下矩阵**完全一致**；PNG 魔数与尺寸、超长文本拒绝。测试中修复校正图形跳过逻辑（旧逻辑误跳定时线上的校正图形，V7+ 才暴露）。
+- `tests/test_store.py`（50/50）：双服务并行——Server A（Flask 模式 + 假支付宝/微信参数 + ADMIN_TOKEN）与 Server B（标准库模式 + 零参数）。覆盖：注册校验/重复 409/登录 401/会话 Cookie/退出注销；无地址建单 400 `address_required`；游客单与登录单隔离（my/orders 只见本人单）；下单地址自动入地址簿并设默认、增删改默认；公开查单脱敏（无 recipient/address_detail 字段、电话打码）；游客追踪（缺参 400、错尾号 403、后四位/全号均可、只回城市级 + 时间线）；**双通道回调联动**：支付宝模拟回调与微信模拟回调（AES-GCM 加密 + RSA 签名）均置 status=PAID 且 fulfillment_status 联动 PAID；后台未登录 401、错口令 401、登录后全量订单含完整电话+地址、改状态非法值 400、PREPARING→SHIPPED+快递单号后游客追踪同步可见、按状态筛选、Bearer 直通；`/api/qr` 返回 PNG；Server B 回归：后台未配置 503、支付宝无参数 503、非法档位 400、标准库模式下注册+Cookie 会话正常。
+- 老库迁移专项：用旧 schema（无商城列）建库并塞入 1 单 PAID + 1 单 PENDING，新代码启动后列自动补齐、已付款单 fulfillment_status 回填 PAID、待付款单为 AWAITING_PAYMENT，二次启动幂等。
+
+前端（index.html / account.html / admin.html）全部内联脚本经 `node --check` 语法校验；三页引用的 /api 路径与后端路由逐条交叉核对一致；新页面零外部资源引用（仅页脚备案链接）。

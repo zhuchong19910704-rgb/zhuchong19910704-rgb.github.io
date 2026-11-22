@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>我的订单 · 阿童木 P4-CAN 套件</title>
+<meta name="description" content="阿童木 P4-CAN 组装套件：买家登录、订单进度与物流追踪、收货地址管理。">
+<style>
+  :root{
+    --ink:#171a20; --ink2:#393c41; --dim:#5c5e62; --dim2:#8a8d93;
+    --bg:#ffffff; --alt:#f4f4f4; --line:#e8e8e8; --line2:#dcdcde;
+    --red:#cc0000; --redtx:#a4261f; --green:#0a7d3b; --amber:#9a7b1c;
+    --mono:"SF Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .nav{position:fixed; top:0; left:0; right:0; z-index:50; display:flex; align-items:center; gap:2px;
+    padding:0 28px; height:56px; background:rgba(255,255,255,.82); backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line)}
+  .nav .logo{font-weight:600; letter-spacing:.32em; font-size:15px; color:var(--ink); padding:8px 12px 8px 2px}
+  .nav a.nl{color:var(--ink2); text-decoration:none; font-size:14px; font-weight:500; padding:7px 13px; border-radius:4px}
+  .nav a.nl:hover{color:var(--ink); background:rgba(0,0,0,.05)}
+  .nav a.nl.cur{color:var(--ink); background:rgba(0,0,0,.06)}
+  .nav .sp{flex:1}
+  @media (max-width:720px){ .nav{padding:0 14px} .nav a.nl{padding:7px 8px} }
+  .wrap{max-width:920px; margin:0 auto; padding:84px 20px 70px}
+  h1{font-size:26px; margin:0 0 6px}
+  .sub{color:var(--dim); font-size:14px; margin:0 0 22px}
+  .card{border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:18px; background:#fff}
+  .card h2{font-size:17px; margin:0 0 14px}
+  .tabs{display:flex; gap:8px; margin:0 0 12px}
+  .tabs button{flex:1; padding:9px 0; border:1px solid var(--line2); background:#fff; color:var(--ink2);
+    border-radius:8px; font-size:14px; cursor:pointer; font-family:inherit}
+  .tabs button.on{background:var(--ink); color:#fff; border-color:var(--ink)}
+  .f{margin-bottom:12px}
+  .f label{display:block; font-size:13px; color:var(--dim); margin-bottom:5px}
+  .in{width:100%; border:1px solid var(--line2); border-radius:8px; padding:10px 12px;
+    font-size:15px; font-family:inherit; color:var(--ink); background:#fff}
+  .in:focus{outline:none; border-color:var(--ink)}
+  .r3{display:flex; gap:8px} .r3 .f{flex:1}
+  @media (max-width:560px){ .r3{flex-direction:column; gap:0} }
+  .btn{border:none; background:var(--ink); color:#fff; font-size:15px; font-weight:600;
+    padding:11px 22px; border-radius:10px; cursor:pointer; font-family:inherit}
+  .btn:hover{opacity:.86} .btn:disabled{opacity:.5; cursor:wait}
+  .btn.ghost{background:#fff; color:var(--ink); border:1px solid var(--line2)}
+  .btn.small{padding:7px 14px; font-size:13px; border-radius:8px}
+  .err{color:var(--redtx); font-size:13px; min-height:18px; margin:8px 0 0}
+  .note{color:var(--dim); font-size:13px; margin:8px 0 0}
+  .userbar{display:flex; align-items:center; gap:10px}
+  .userbar .sp{flex:1}
+  .link{background:none; border:none; color:var(--dim); font-size:13px; cursor:pointer;
+    text-decoration:underline; padding:0; font-family:inherit}
+  .order{border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px}
+  .order .top{display:flex; flex-wrap:wrap; gap:6px 14px; align-items:baseline}
+  .order .tn{font-weight:600; font-size:16px}
+  .order .amt{font-weight:700}
+  .order .meta{color:var(--dim); font-size:13px}
+  .order .addr{color:var(--ink2); font-size:13px; margin-top:8px}
+  .order .ship{font-size:13px; color:var(--ink2); margin-top:6px}
+  .order .ship a{color:var(--ink)}
+  .badge{display:inline-block; font-size:12px; padding:2px 9px; border-radius:99px;
+    background:var(--alt); color:var(--ink2); border:1px solid var(--line2)}
+  .badge.pay{color:var(--amber); border-color:var(--amber)}
+  .badge.go{color:var(--green); border-color:var(--green)}
+  .tl{list-style:none; margin:12px 0 2px; padding:0}
+  .tl li{position:relative; padding:0 0 12px 26px; color:var(--dim2); font-size:14px}
+  .tl li:before{content:""; position:absolute; left:5px; top:16px; bottom:-2px; width:2px; background:var(--line)}
+  .tl li:last-child:before{display:none}
+  .tl li .dot{position:absolute; left:0; top:4px; width:12px; height:12px; border-radius:50%;
+    background:#fff; border:2px solid var(--line2)}
+  .tl li.done{color:var(--ink2)} .tl li.done .dot{background:var(--green); border-color:var(--green)}
+  .tl li.cur{color:var(--ink); font-weight:600} .tl li.cur .dot{background:var(--ink); border-color:var(--ink)}
+  .tl li .tt{font-size:12px; color:var(--dim2); font-weight:400; margin-left:8px}
+  .addr-row{display:flex; gap:10px; align-items:flex-start; border:1px solid var(--line);
+    border-radius:10px; padding:12px 14px; margin-bottom:10px}
+  .addr-row .body{flex:1; font-size:14px; color:var(--ink2)}
+  .addr-row .body b{color:var(--ink)}
+  .empty{color:var(--dim); font-size:14px; padding:8px 0}
+  footer{color:var(--dim2); font-size:12px; text-align:center; padding:10px 0 30px}
+  footer a{color:inherit}
+</style>
+</head>
+<body>
+  <nav class="nav">
+    <span class="logo">阿童木</span>
+    <a class="nl" href="index.html">首页</a>
+    <a class="nl" href="index.html#download">固件下载</a>
+    <a class="nl" href="index.html#price">套件价格</a>
+    <span class="sp"></span>
+    <a class="nl cur" href="account.html">我的订单</a>
+  </nav>
+
+  <div class="wrap">
+    <h1>我的订单</h1>
+    <p class="sub">查看订单进度、快递单号，管理收货地址。没登录也可以用订单号 + 下单手机号后四位查进度。</p>
+
+    <!-- 登录/注册 -->
+    <div class="card" id="authCard">
+      <div class="tabs">
+        <button type="button" id="tabLogin" class="on">登录</button>
+        <button type="button" id="tabReg">注册</button>
+      </div>
+      <div class="f"><label>手机号</label><input class="in" id="authPhone" inputmode="numeric" autocomplete="tel" placeholder="11 位手机号"></div>
+      <div class="f"><label>密码</label><input class="in" id="authPw" type="password" autocomplete="current-password" placeholder="至少 6 位"></div>
+      <button type="button" class="btn" id="authBtn">登录</button>
+      <p class="err" id="authErr"></p>
+      <p class="note">注册后下单地址会自动存进地址簿，固件更新、保修与售后都认这个账号。</p>
+    </div>
+
+    <!-- 已登录条 -->
+    <div class="card" id="userBar" style="display:none">
+      <div class="userbar">
+        <span id="userText"></span><span class="sp"></span>
+        <button type="button" class="link" id="logoutBtn">退出登录</button>
+      </div>
+    </div>
+
+    <!-- 我的订单 -->
+    <div class="card" id="ordersCard" style="display:none">
+      <h2>我的订单</h2>
+      <div id="ordersList"><p class="empty">加载中…</p></div>
+    </div>
+
+    <!-- 游客追踪 -->
+    <div class="card">
+      <h2>订单进度查询</h2>
+      <div class="f"><label>订单号</label><input class="in" id="trackId" placeholder="如 AT20261122…" style="font-family:var(--mono)"></div>
+      <div class="f"><label>下单手机号后四位</label><input class="in" id="trackPhone" inputmode="numeric" maxlength="4" placeholder="4 位数字"></div>
+      <button type="button" class="btn" id="trackBtn">查询进度</button>
+      <p class="err" id="trackErr"></p>
+      <div id="trackResult"></div>
+    </div>
+
+    <!-- 地址管理 -->
+    <div class="card" id="addrCard" style="display:none">
+      <h2>收货地址</h2>
+      <div id="addrList"></div>
+      <div class="f"><label>收货人</label><input class="in" id="adRecipient" placeholder="收件人姓名"></div>
+      <div class="f"><label>手机号</label><input class="in" id="adPhone" inputmode="numeric" placeholder="11 位手机号"></div>
+      <div class="r3">
+        <div class="f"><label>省</label><input class="in" id="adProvince" placeholder="如 浙江省"></div>
+        <div class="f"><label>市</label><input class="in" id="adCity" placeholder="如 台州市"></div>
+        <div class="f"><label>区/县</label><input class="in" id="adDistrict" placeholder="如 仙居县"></div>
+      </div>
+      <div class="f"><label>详细地址</label><input class="in" id="adDetail" placeholder="街道、门牌号、收件点"></div>
+      <button type="button" class="btn" id="adAdd">新增地址</button>
+      <p class="err" id="adErr"></p>
+    </div>
+  </div>
+
+  <footer>阿童木 · P4-CAN 组装套件 · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener" style="text-decoration:none">浙ICP备2026029422号-2</a></footer>
+
+<script>
+  function el(id){ return document.getElementById(id); }
+  function api(method, path, body){
+    var opt = {method: method, headers: {'Content-Type': 'application/json'}};
+    if (body) opt.body = JSON.stringify(body);
+    return fetch(path, opt).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(j){ return {status: r.status, j: j}; });
+    });
+  }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+  function tlHtml(nodes){
+    var html = '<ul class="tl">';
+    (nodes || []).forEach(function(n){
+      html += '<li class="' + (n.current ? 'cur' : (n.done ? 'done' : '')) + '"><span class="dot"></span>' +
+        esc(n.label) + (n.time ? '<span class="tt">' + esc(n.time.replace('T', ' ')) + '</span>' : '') + '</li>';
+    });
+    return html + '</ul>';
+  }
+  function orderHtml(o){
+    var badgeCls = o.fulfillment_status === 'AWAITING_PAYMENT' ? 'badge pay'
+      : (o.fulfillment_status === 'COMPLETED' || o.fulfillment_status === 'DELIVERED') ? 'badge go' : 'badge';
+    var html = '<div class="order"><div class="top">' +
+      '<span class="tn">' + esc(o.tier_name) + '</span>' +
+      '<span class="amt">¥' + esc(o.amount) + '</span>' +
+      '<span class="' + badgeCls + '">' + esc(o.fulfillment_label || '') + '</span>' +
+      '<span class="meta">订单号 ' + esc(o.order_id) + '</span>' +
+      '<span class="meta">' + esc((o.created_at || '').replace('T', ' ')) + '</span></div>';
+    if (o.recipient) {
+      html += '<div class="addr">' + esc(o.recipient) + ' · ' + esc(o.phone || '') + ' · ' +
+        esc([o.province, o.city, o.district, o.address_detail].filter(Boolean).join(' ')) + '</div>';
+    }
+    if (o.car) html += '<div class="addr">车型：' + esc(o.car) + '</div>';
+    if (o.tracking_no) {
+      html += '<div class="ship">' + esc(o.courier || '快递') + ' 单号 <span style="font-family:var(--mono)">' +
+        esc(o.tracking_no) + '</span></div>';
+    }
+    html += tlHtml(o.timeline) + '</div>';
+    return html;
+  }
+
+  // ---- 登录/注册 ----
+  var authMode = 'login';
+  function setMode(m){
+    authMode = m;
+    el('tabLogin').classList.toggle('on', m === 'login');
+    el('tabReg').classList.toggle('on', m === 'register');
+    el('authBtn').textContent = m === 'login' ? '登录' : '注册并登录';
+    el('authErr').textContent = '';
+  }
+  el('tabLogin').addEventListener('click', function(){ setMode('login'); });
+  el('tabReg').addEventListener('click', function(){ setMode('register'); });
+  el('authBtn').addEventListener('click', function(){
+    var phone = el('authPhone').value.trim(), pw = el('authPw').value;
+    el('authErr').textContent = '';
+    if (!/^1\d{10}$/.test(phone)) { el('authErr').textContent = '手机号格式不对（11 位）。'; return; }
+    if (pw.length < 6) { el('authErr').textContent = '密码至少 6 位。'; return; }
+    var btn = el('authBtn'); btn.disabled = true;
+    api('POST', authMode === 'login' ? '/api/login' : '/api/register', {phone: phone, password: pw})
+      .then(function(res){
+        btn.disabled = false;
+        if (res.status === 200 || res.status === 201) { refresh(); }
+        else if (res.status === 409) { el('authErr').textContent = '这个手机号已注册，切到「登录」直接登录。'; }
+        else if (res.status === 401) { el('authErr').textContent = '手机号或密码不正确。'; }
+        else { el('authErr').textContent = (res.j && res.j.message) || '提交失败，请再试一次。'; }
+      })
+      .catch(function(){ btn.disabled = false; el('authErr').textContent = '网络异常，请再试一次。'; });
+  });
+  el('logoutBtn').addEventListener('click', function(){
+    api('POST', '/api/logout', {}).then(refresh);
+  });
+
+  function refresh(){
+    api('GET', '/api/me').then(function(res){
+      if (res.status === 200 && res.j.user) {
+        el('authCard').style.display = 'none';
+        el('userBar').style.display = '';
+        el('ordersCard').style.display = '';
+        el('addrCard').style.display = '';
+        el('userText').textContent = '已登录：' + res.j.user.phone;
+        loadOrders(); loadAddresses();
+      } else {
+        el('authCard').style.display = '';
+        el('userBar').style.display = 'none';
+        el('ordersCard').style.display = 'none';
+        el('addrCard').style.display = 'none';
+      }
+    });
+  }
+  function loadOrders(){
+    api('GET', '/api/my/orders').then(function(res){
+      var list = (res.j && res.j.orders) || [];
+      el('ordersList').innerHTML = list.length ? list.map(orderHtml).join('') : '<p class="empty">还没有订单。去 <a href="index.html#price">价格区</a> 选一套吧。</p>';
+    });
+  }
+
+  // ---- 地址管理 ----
+  function loadAddresses(){
+    api('GET', '/api/my/addresses').then(function(res){
+      var list = (res.j && res.j.addresses) || [];
+      if (!list.length) { el('addrList').innerHTML = '<p class="empty">暂无地址，下单时填的地址会自动存进来。</p>'; return; }
+      el('addrList').innerHTML = list.map(function(a){
+        return '<div class="addr-row"><div class="body"><b>' + esc(a.recipient) + '</b> · ' + esc(a.phone) +
+          (a.is_default ? ' · <span class="badge">默认</span>' : '') + '<br>' +
+          esc([a.province, a.city, a.district, a.address_detail].filter(Boolean).join(' ')) + '</div>' +
+          (a.is_default ? '' : '<button type="button" class="btn ghost small" data-def="' + a.id + '">设默认</button>') +
+          '<button type="button" class="btn ghost small" data-del="' + a.id + '">删除</button></div>';
+      }).join('');
+      el('addrList').querySelectorAll('[data-def]').forEach(function(b){
+        b.addEventListener('click', function(){
+          api('POST', '/api/my/addresses/' + b.getAttribute('data-def') + '/default', {}).then(loadAddresses);
+        });
+      });
+      el('addrList').querySelectorAll('[data-del]').forEach(function(b){
+        b.addEventListener('click', function(){
+          api('DELETE', '/api/my/addresses/' + b.getAttribute('data-del')).then(loadAddresses);
+        });
+      });
+    });
+  }
+  el('adAdd').addEventListener('click', function(){
+    var payload = {
+      recipient: el('adRecipient').value.trim(), phone: el('adPhone').value.trim(),
+      province: el('adProvince').value.trim(), city: el('adCity').value.trim(),
+      district: el('adDistrict').value.trim(), address_detail: el('adDetail').value.trim()
+    };
+    el('adErr').textContent = '';
+    if (!payload.recipient || !payload.address_detail) { el('adErr').textContent = '收货人和详细地址必填。'; return; }
+    if (payload.phone && !/^1\d{10}$/.test(payload.phone)) { el('adErr').textContent = '手机号格式不对。'; return; }
+    api('POST', '/api/my/addresses', payload).then(function(res){
+      if (res.status === 201) {
+        ['adRecipient','adPhone','adProvince','adCity','adDistrict','adDetail'].forEach(function(id){ el(id).value = ''; });
+        loadAddresses();
+      } else { el('adErr').textContent = (res.j && res.j.message) || '保存失败，请再试一次。'; }
+    });
+  });
+
+  // ---- 游客追踪 ----
+  el('trackBtn').addEventListener('click', function(){
+    var oid = el('trackId').value.trim(), phone = el('trackPhone').value.trim();
+    el('trackErr').textContent = ''; el('trackResult').innerHTML = '';
+    if (!oid) { el('trackErr').textContent = '请填订单号。'; return; }
+    if (!/^\d{4}$/.test(phone)) { el('trackErr').textContent = '请填下单手机号的后四位。'; return; }
+    fetch('/api/track/' + encodeURIComponent(oid) + '?phone=' + encodeURIComponent(phone))
+      .then(function(r){ return r.json().then(function(j){ return {status: r.status, j: j}; }); })
+      .then(function(res){
+        if (res.status !== 200) {
+          el('trackErr').textContent = res.status === 404 ? '没找到这个订单号。'
+            : res.status === 403 ? '手机号后四位对不上，请确认。' : '查询失败，请再试一次。';
+          return;
+        }
+        var o = res.j;
+        var html = '<div class="order" style="margin-top:14px"><div class="top">' +
+          '<span class="tn">' + esc(o.tier_name) + '</span><span class="amt">¥' + esc(o.amount) + '</span>' +
+          '<span class="badge">' + esc(o.fulfillment_label || '') + '</span>' +
+          '<span class="meta">' + esc([o.province, o.city].filter(Boolean).join(' ')) + '</span></div>';
+        if (o.tracking_no) {
+          html += '<div class="ship">' + esc(o.courier || '快递') + ' 单号 <span style="font-family:var(--mono)">' + esc(o.tracking_no) + '</span></div>';
+        }
+        html += tlHtml(o.timeline) + '</div>';
+        el('trackResult').innerHTML = html;
+      })
+      .catch(function(){ el('trackErr').textContent = '网络异常，请再试一次。'; });
+  });
+
+  refresh();
+</script>
+</body>
+</html>

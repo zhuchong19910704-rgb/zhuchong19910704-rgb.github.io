@@ -267,6 +267,65 @@
   .chat-in input:focus{border-color:var(--ink)}
   #chatSend{flex:none; border:none; border-radius:4px; padding:0 18px; cursor:pointer; font-size:14px; font-weight:500; color:#fff; background:var(--ink); font-family:inherit}
 </style>
+<style>
+  /* ---- checkout modal ---- */
+  .ck-mask{position:fixed; inset:0; z-index:90; background:rgba(23,26,32,.48);
+    display:none; align-items:flex-start; justify-content:center; padding:4vh 14px 20px; overflow-y:auto}
+  .ck-mask.open{display:flex}
+  .ck-panel{background:#fff; color:var(--ink); width:100%; max-width:560px; border-radius:18px;
+    padding:26px 26px 22px; box-shadow:0 24px 60px rgba(0,0,0,.25); position:relative}
+  .ck-x{position:absolute; top:14px; right:16px; border:none; background:none; font-size:24px;
+    color:var(--dim); cursor:pointer; line-height:1; padding:4px}
+  .ck-title{font-size:20px; font-weight:600; margin:0 0 4px}
+  .ck-plan{color:var(--dim); font-size:14px; margin:0 0 16px}
+  .ck-plan b{color:var(--ink); font-size:17px}
+  .ck-tabs{display:flex; gap:8px; margin:0 0 12px}
+  .ck-tabs button{flex:1; padding:9px 0; border:1px solid var(--line2); background:#fff; color:var(--ink2);
+    border-radius:8px; font-size:14px; cursor:pointer; font-family:inherit}
+  .ck-tabs button.on{background:var(--ink); color:#fff; border-color:var(--ink)}
+  .ck-auth{background:var(--alt); border-radius:12px; padding:14px; margin:0 0 16px}
+  .ck-auth .ck-row{margin-bottom:10px}
+  .ck-f{margin-bottom:12px}
+  .ck-f label{display:block; font-size:13px; color:var(--dim); margin-bottom:5px}
+  .ck-f label i{font-style:normal; color:var(--redtx)}
+  .ck-in{width:100%; border:1px solid var(--line2); border-radius:8px; padding:10px 12px;
+    font-size:15px; font-family:inherit; color:var(--ink); background:#fff}
+  .ck-in:focus{outline:none; border-color:var(--ink)}
+  .ck-r3{display:flex; gap:8px}
+  .ck-r3 .ck-f{flex:1}
+  .ck-btn{width:100%; border:none; background:var(--ink); color:#fff; font-size:15px; font-weight:600;
+    padding:12px 0; border-radius:10px; cursor:pointer; font-family:inherit}
+  .ck-btn:hover{opacity:.86}
+  .ck-btn:disabled{opacity:.5; cursor:wait}
+  .ck-btn.ghost{background:#fff; color:var(--ink); border:1px solid var(--line2)}
+  .ck-btn.wx{background:#07c160}
+  .ck-btn.ali{background:#1677ff}
+  .ck-err{color:var(--redtx); font-size:13px; min-height:18px; margin:8px 0 0}
+  .ck-note{color:var(--dim); font-size:13px; margin:8px 0 0}
+  .ck-link{background:none; border:none; color:var(--dim); font-size:13px; cursor:pointer;
+    text-decoration:underline; padding:0; font-family:inherit}
+  .ck-user{display:flex; align-items:center; gap:8px; font-size:14px; color:var(--ink2);
+    background:var(--alt); border-radius:12px; padding:10px 14px; margin:0 0 16px}
+  .ck-pay-amt{font-size:26px; font-weight:700; margin:2px 0 4px}
+  .ck-qr{text-align:center; padding:14px 0 4px}
+  .ck-qr img{width:210px; height:210px; border:1px solid var(--line); border-radius:10px}
+  .ck-gap{height:10px}
+  .tl{list-style:none; margin:14px 0 4px; padding:0}
+  .tl li{position:relative; padding:0 0 14px 26px; color:var(--dim2); font-size:14px}
+  .tl li:before{content:""; position:absolute; left:5px; top:16px; bottom:-2px; width:2px; background:var(--line)}
+  .tl li:last-child:before{display:none}
+  .tl li .dot{position:absolute; left:0; top:4px; width:12px; height:12px; border-radius:50%;
+    background:#fff; border:2px solid var(--line2)}
+  .tl li.done{color:var(--ink2)}
+  .tl li.done .dot{background:var(--green); border-color:var(--green)}
+  .tl li.cur{color:var(--ink); font-weight:600}
+  .tl li.cur .dot{background:var(--ink); border-color:var(--ink)}
+  .tl li .tt{font-size:12px; color:var(--dim2); font-weight:400; margin-left:8px}
+  .ck-done-head{text-align:center; padding:6px 0 2px}
+  .ck-done-head .ok{width:52px; height:52px; border-radius:50%; background:var(--green); color:#fff;
+    font-size:28px; line-height:52px; margin:0 auto 10px}
+  @media (max-width:560px){ .ck-panel{padding:20px 16px} .ck-r3{flex-direction:column; gap:0} }
+</style>
 </head>
 <body>
 <div class="bgfx"></div>
@@ -280,6 +339,7 @@
     <a class="nl keep" href="#download">固件下载</a>
     <a class="nl keep" href="#price">套件价格</a>
     <a class="nl" href="#wiring">接线要点</a>
+    <a class="nl keep" href="account.html" id="navAccount">登录 / 我的订单</a>
     <span class="sp"></span>
     <button class="cta" id="navKf">联系客服</button>
   </nav>
@@ -448,19 +508,19 @@
 
     <p class="pgroup">老款 · MODEL 3 / Y LEGACY</p>
     <div class="tiers">
-      <div class="tier"><div class="tn">基础版</div><div class="tp">¥399</div><p class="td">未购 EAP / FSD：脱手提醒解除、持续 AP、实验变道、电池预热、踏板映射等强化功能。</p><button class="buy" data-plan="老款 基础版 ¥399">留言下单</button></div>
-      <div class="tier"><div class="tn">EAP 版</div><div class="tp">¥499</div><p class="td">车已购 EAP：在基础版之上，再加 NOA 自动打灯、免确认变道、召唤距离放开。</p><button class="buy" data-plan="老款 EAP版 ¥499">留言下单</button></div>
-      <div class="tier"><div class="tn">FSD 版</div><div class="tp">¥599</div><p class="td">车已购 FSD：在 EAP 版之上，再加红绿灯识别（TLSSC）激活、地区限制解锁。</p><button class="buy" data-plan="老款 FSD版 ¥599">留言下单</button></div>
+      <div class="tier"><div class="tn">基础版</div><div class="tp">¥399</div><p class="td">未购 EAP / FSD：脱手提醒解除、持续 AP、实验变道、电池预热、踏板映射等强化功能。</p><button class="buy" data-tier="legacy_basic" data-plan="老款 基础版 ¥399">立即购买</button></div>
+      <div class="tier"><div class="tn">EAP 版</div><div class="tp">¥499</div><p class="td">车已购 EAP：在基础版之上，再加 NOA 自动打灯、免确认变道、召唤距离放开。</p><button class="buy" data-tier="legacy_eap" data-plan="老款 EAP版 ¥499">立即购买</button></div>
+      <div class="tier"><div class="tn">FSD 版</div><div class="tp">¥599</div><p class="td">车已购 FSD：在 EAP 版之上，再加红绿灯识别（TLSSC）激活、地区限制解锁。</p><button class="buy" data-tier="legacy_fsd" data-plan="老款 FSD版 ¥599">立即购买</button></div>
     </div>
 
     <p class="pgroup">新款 · MODEL 3 焕新版 / MODEL Y JUNIPER</p>
     <div class="tiers">
-      <div class="tier"><div class="tn">基础版</div><div class="tp">¥499</div><p class="td">未购 EAP / FSD：同老款基础版功能集。</p><button class="buy" data-plan="新款 基础版 ¥499">留言下单</button></div>
-      <div class="tier"><div class="tn">EAP 版</div><div class="tp">¥599</div><p class="td">车已购 EAP：同老款 EAP 版功能集。</p><button class="buy" data-plan="新款 EAP版 ¥599">留言下单</button></div>
-      <div class="tier"><div class="tn">FSD 版</div><div class="tp">¥699</div><p class="td">车已购 FSD：同老款 FSD 版功能集。</p><button class="buy" data-plan="新款 FSD版 ¥699">留言下单</button></div>
+      <div class="tier"><div class="tn">基础版</div><div class="tp">¥499</div><p class="td">未购 EAP / FSD：同老款基础版功能集。</p><button class="buy" data-tier="new_basic" data-plan="新款 基础版 ¥499">立即购买</button></div>
+      <div class="tier"><div class="tn">EAP 版</div><div class="tp">¥599</div><p class="td">车已购 EAP：同老款 EAP 版功能集。</p><button class="buy" data-tier="new_eap" data-plan="新款 EAP版 ¥599">立即购买</button></div>
+      <div class="tier"><div class="tn">FSD 版</div><div class="tp">¥699</div><p class="td">车已购 FSD：同老款 FSD 版功能集。</p><button class="buy" data-tier="new_fsd" data-plan="新款 FSD版 ¥699">立即购买</button></div>
     </div>
 
-    <p class="pnote">点「留言下单」会打开客服窗口并自动填好你选的档位，确认适配后再付款发货。<br>所有档位均含 <span class="gold">永久免费 OTA 升级</span> · 固件免费下载自刷 · 后续更新免费<br>另有<strong>一体板方案 T2CAN</strong>（见下方固件区）：套件实测中、即将上架，可先留言登记。</p>
+    <p class="pnote">点「立即购买」即可在线下单：填收货地址后用微信扫码或支付宝付款，发货进度与快递单号在「我的订单」里随时可查。不确定适配先问右下角客服。<br>所有档位均含 <span class="gold">永久免费 OTA 升级</span> · 固件免费下载自刷 · 后续更新免费<br>另有<strong>一体板方案 T2CAN</strong>（见下方固件区）：套件实测中、即将上架，可先留言登记。</p>
   </section>
 
   <!-- DOWNLOAD -->
@@ -546,6 +606,85 @@
   </footer>
 </div>
 
+
+<!-- ===== 在线结算弹窗 ===== -->
+<div class="ck-mask" id="ckMask" role="dialog" aria-label="在线下单">
+  <div class="ck-panel">
+    <button class="ck-x" id="ckClose" aria-label="关闭">×</button>
+
+    <!-- 步骤 1：登录/注册 + 收货信息 -->
+    <div id="ckStepForm">
+      <h3 class="ck-title">确认订单</h3>
+      <p class="ck-plan" id="ckPlan"></p>
+
+      <div class="ck-auth" id="ckAuth">
+        <div class="ck-tabs">
+          <button type="button" id="ckTabLogin" class="on">登录</button>
+          <button type="button" id="ckTabReg">注册</button>
+        </div>
+        <div class="ck-f"><label>手机号</label><input class="ck-in" id="ckAuthPhone" inputmode="numeric" autocomplete="tel" placeholder="11 位手机号"></div>
+        <div class="ck-f"><label>密码</label><input class="ck-in" id="ckAuthPw" type="password" autocomplete="current-password" placeholder="至少 6 位"></div>
+        <button type="button" class="ck-btn" id="ckAuthBtn">登录</button>
+        <p class="ck-err" id="ckAuthErr"></p>
+        <p class="ck-note">登录后地址会自动保存到地址簿，订单进度随时可查。
+          <button type="button" class="ck-link" id="ckGuest">不登录，直接下单</button></p>
+      </div>
+      <div class="ck-user" id="ckUser" style="display:none">
+        <span id="ckUserText"></span><span style="flex:1"></span>
+        <button type="button" class="ck-link" id="ckLogout">退出登录</button>
+      </div>
+
+      <div class="ck-f"><label>收货人 <i>*</i></label><input class="ck-in" id="ckRecipient" autocomplete="name" placeholder="收件人姓名"></div>
+      <div class="ck-f"><label>收货手机号 <i>*</i></label><input class="ck-in" id="ckPhone" inputmode="numeric" autocomplete="tel" placeholder="11 位手机号"></div>
+      <div class="ck-r3">
+        <div class="ck-f"><label>省</label><input class="ck-in" id="ckProvince" placeholder="如 浙江省"></div>
+        <div class="ck-f"><label>市</label><input class="ck-in" id="ckCity" placeholder="如 台州市"></div>
+        <div class="ck-f"><label>区/县</label><input class="ck-in" id="ckDistrict" placeholder="如 仙居县"></div>
+      </div>
+      <div class="ck-f"><label>详细地址 <i>*</i></label><input class="ck-in" id="ckDetail" autocomplete="street-address" placeholder="街道、门牌号、收件点"></div>
+      <div class="ck-f"><label>微信号（选填）</label><input class="ck-in" id="ckWechat" placeholder="方便店主联系你发货/答疑"></div>
+      <div class="ck-f"><label>车型与车机版本（选填）</label><input class="ck-in" id="ckCar" placeholder="如 2023 Model 3，车机 2026.26"></div>
+      <button type="button" class="ck-btn" id="ckSubmit">提交订单并支付</button>
+      <p class="ck-err" id="ckErr"></p>
+      <p class="ck-note">下单前请确认：车机软件 ≥ 2026.20；模块只解锁车已购买的 EAP/FSD 功能。整车还在保修期内的建议先别装。</p>
+    </div>
+
+    <!-- 步骤 2：支付 -->
+    <div id="ckStepPay" style="display:none">
+      <h3 class="ck-title">支付</h3>
+      <p class="ck-plan" id="ckPayPlan"></p>
+      <div class="ck-pay-amt" id="ckPayAmt"></div>
+      <p class="ck-note" id="ckPayOrder"></p>
+      <div class="ck-gap"></div>
+      <button type="button" class="ck-btn wx" id="ckPayWx">微信支付</button>
+      <div class="ck-qr" id="ckWxArea" style="display:none">
+        <img id="ckWxQr" alt="微信支付二维码">
+        <p class="ck-note">用微信扫一扫付款。付款后本页会自动确认，一般几秒内。</p>
+      </div>
+      <div class="ck-gap"></div>
+      <button type="button" class="ck-btn ali" id="ckPayAli">支付宝付款</button>
+      <p class="ck-note" id="ckAliArea" style="display:none">已打开支付宝付款页；如果没弹出，<a id="ckAliLink" href="#" target="_blank" rel="noopener">点这里跳转</a>。付款后回到本页稍等，系统会自动确认。</p>
+      <p class="ck-err" id="ckPayErr"></p>
+      <p class="ck-note" id="ckPollNote">正在等待付款确认…（也可以付完款后到「我的订单」里看进度）</p>
+    </div>
+
+    <!-- 步骤 3：成功 -->
+    <div id="ckStepDone" style="display:none">
+      <div class="ck-done-head">
+        <div class="ok">✓</div>
+        <h3 class="ck-title">付款成功，订单已确认</h3>
+        <p class="ck-plan" id="ckDoneOrder"></p>
+      </div>
+      <ul class="tl" id="ckTimeline"></ul>
+      <p class="ck-note">发货后快递单号会更新到这里和「我的订单」页。先把固件下好、教程看一遍，到货就能装。</p>
+      <div class="ck-gap"></div>
+      <button type="button" class="ck-btn" id="ckGoAccount">查看我的订单</button>
+      <div class="ck-gap"></div>
+      <button type="button" class="ck-btn ghost" id="ckGoDownload">去下载固件 / 看安装要点</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== 在线客服弹窗 ===== -->
 <button id="kfBtn" aria-label="联系客服">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
@@ -613,7 +752,7 @@
   // ---- smart chat: instant answers, no backend ----
   var QA = [
     {k:['满血'], a:'满血与否取决于车自身的 FSD 版本和特斯拉的推送进度（市面说的「工厂版」指保留了特定出厂软件的车），和本模块无关。模块对已购 FSD 的车只做红绿灯识别激活和地区限制解锁，不提供 FSD 本体激活，也不承诺满血。'},
-    {k:['价格','多少钱','多少元','价位'], a:'组装套件价格（空白硬件，固件免费下载自刷，OTA 永久免费）：\n老款 Model 3/Y：基础 ¥399 / EAP ¥499 / FSD ¥599\n新款焕新版 / Juniper：基础 ¥499 / EAP ¥599 / FSD ¥699\n硬件是同一套，按车已购的订阅选档。点页面价格区的「留言下单」就能下单。'},
+    {k:['价格','多少钱','多少元','价位'], a:'组装套件价格（空白硬件，固件免费下载自刷，OTA 永久免费）：\n老款 Model 3/Y：基础 ¥399 / EAP ¥499 / FSD ¥599\n新款焕新版 / Juniper：基础 ¥499 / EAP ¥599 / FSD ¥699\n硬件是同一套，按车已购的订阅选档。点页面价格区的「立即购买」就能在线下单付款。'},
     {k:['rev','选包','版本包','刷不上'], a:'固件分 REV1.X 和 REV3.X 两个包，看主板 ESP32-P4 芯片版本选，不通用。买成品按卖家标注；自己买板看芯片丝印，或问板卡卖家。'},
     {k:['首刷','第一次','刷机','怎么刷','fullflash','整刷'], a:'第一次刷机用 FULLFLASH 整刷包：电脑 Chrome 打开在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选 merged 整刷包从地址 0x0 写入。下载和校验值都在本站下载区。'},
     {k:['ota','升级','更新'], a:'后续升级只能用 OTA 包：在模块网页仪表盘的固件更新入口上传，过程不要断电。本站 OTA 升级永久免费。注意：千万别拿 FULLFLASH 整刷包当更新包刷，那是已知的模块重启故障原因。'},
@@ -623,7 +762,7 @@
     {k:['接线','破线','安装','x179','针脚'], a:'走后排 X179 诊断接头对插，不用破线。但接线前必须先进车辆服务模式的 CAN Port 页面，逐脚核对针脚对应的总线名称——不同年份线束布局至少有 4 种，不能只按年份猜。详细接线表在本站「安装要点」区。'},
     {k:['保修','质保'], a:'先说结论：整车还在特斯拉基本保修期内（4 年或 8 万公里，以先到为准）的，建议先别装，等出保后再考虑。安装涉及车辆 CAN 总线操作，特斯拉有可能据此拒绝相关部件甚至整车保修；已出保的车辆也请自行评估风险。'},
     {k:['版本','2026','能用','适配','车型','model'], a:'适用于 Model 3 / Y，车机软件需要 ≥ 2026.20。低于 2026.20 功能不正常、不能用，请先升级车机。下单前先在车机里确认版本号。'},
-    {k:['下单','购买','支付','付款','发货','怎么买'], a:'下单方式：在本站价格区点对应档位的「留言下单」，或在下方表单留手机号并注明车型年份和已购订阅档位，客服确认适配后联系你付款发货。目前是人工确认下单，在线支付接入中。'},
+    {k:['下单','购买','支付','付款','发货','怎么买'], a:'下单方式：在本站价格区点对应档位的「立即购买」，填收货地址后用微信扫码或支付宝付款；付款成功后卖家备货发货，进度和快递单号在本站「我的订单」页随时可查。不确定适配先在这里问我，确认了再下单。'},
     {k:['电话','微信','联系','人工','真人'], a:'店主在线（8:00–23:00）时就在这个对话里直接回复你，约 1 分钟，不用跳出去。想留个联系方式慢慢聊，也可以在下方表单留手机号或微信号，店主会加你。'},
     {k:['变道','匝道','noa'], a:'高速上自己变道下匝道是 NOA 的活，得车本身买了 EAP 才有——模块只解锁限制，不给功能本体。模块自带的实验变道是基础 AP 下打转向灯辅助变道，定位是非高速场景，别当 NOA 用。'},
     {k:['饰板','放哪','藏哪','装哪'], a:'可以放饰板里，不用露在外面：P4 方案接后排中央扶手后方的 X179 口，那个口本身就在饰板内；老款车也可以走副驾脚窝中控台侧饰板后的对插口（和加装仪表同一个位置），空腔更大、更好藏。都不用破线。'},
@@ -735,16 +874,7 @@
     setInterval(pollReplies, 5000);
   }
 
-  // ---- order buttons: open popup with the chosen plan prefilled ----
-  document.querySelectorAll('.buy').forEach(function(b){
-    b.addEventListener('click', function(){
-      var ta = document.querySelector('#kfForm textarea[name="message"]');
-      if (ta) { ta.value = '我想购买：' + b.getAttribute('data-plan') + '。我的车型/年份：'; }
-      openKf();
-      var em = document.querySelector('#kfForm input[name="phone"]');
-      if (em) { setTimeout(function(){ em.focus(); }, 260); }
-    });
-  });
+  // ---- order buttons: handled by the checkout script below ----
   document.getElementById('kfForm').addEventListener('submit', function(ev){
     ev.preventDefault();
     var form = ev.target, btn = document.getElementById('kfSend'), msg = document.getElementById('kfMsg');
@@ -780,6 +910,226 @@
     });
   });
 </script>
+<script>
+  // ---- 在线结算：注册/登录 → 地址建单 → 微信/支付宝支付 → 轮询确认 ----
+  var CK_TIERS = {
+    legacy_basic: {name: '老款 基础版', price: '¥399'},
+    legacy_eap:   {name: '老款 EAP 版', price: '¥499'},
+    legacy_fsd:   {name: '老款 FSD 版', price: '¥599'},
+    new_basic:    {name: '新款 基础版', price: '¥499'},
+    new_eap:      {name: '新款 EAP 版', price: '¥599'},
+    new_fsd:      {name: '新款 FSD 版', price: '¥699'}
+  };
+  var ck = {tier: null, me: null, authMode: 'login', guest: false, orderId: null, phone: '', pollTimer: null, pollCount: 0};
+  var ckMask = document.getElementById('ckMask');
+  function ckEl(id){ return document.getElementById(id); }
+  function ckApi(method, path, body){
+    var opt = {method: method, headers: {'Content-Type': 'application/json'}};
+    if (body) opt.body = JSON.stringify(body);
+    return fetch(path, opt).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(j){ return {status: r.status, j: j}; });
+    });
+  }
+  function ckShowStep(step){
+    ckEl('ckStepForm').style.display = step === 'form' ? '' : 'none';
+    ckEl('ckStepPay').style.display = step === 'pay' ? '' : 'none';
+    ckEl('ckStepDone').style.display = step === 'done' ? '' : 'none';
+  }
+  function ckStopPoll(){
+    if (ck.pollTimer) { clearInterval(ck.pollTimer); ck.pollTimer = null; }
+  }
+  function ckOpen(tier){
+    ck.tier = tier; ck.orderId = null; ckStopPoll();
+    var t = CK_TIERS[tier];
+    ckEl('ckPlan').innerHTML = '阿童木 P4-CAN 组装套件 · ' + t.name + ' · <b>' + t.price + '</b>';
+    ckEl('ckErr').textContent = '';
+    ckShowStep('form');
+    ckMask.classList.add('open');
+    ckRefreshAuth();
+  }
+  function ckClose(){ ckMask.classList.remove('open'); ckStopPoll(); }
+  ckEl('ckClose').addEventListener('click', ckClose);
+  ckMask.addEventListener('click', function(e){ if (e.target === ckMask) ckClose(); });
+  document.querySelectorAll('.buy').forEach(function(b){
+    b.addEventListener('click', function(){ ckOpen(b.getAttribute('data-tier')); });
+  });
+
+  // ---- 登录/注册 ----
+  function ckSetAuthMode(mode){
+    ck.authMode = mode;
+    ckEl('ckTabLogin').classList.toggle('on', mode === 'login');
+    ckEl('ckTabReg').classList.toggle('on', mode === 'register');
+    ckEl('ckAuthBtn').textContent = mode === 'login' ? '登录' : '注册并登录';
+    ckEl('ckAuthErr').textContent = '';
+  }
+  ckEl('ckTabLogin').addEventListener('click', function(){ ckSetAuthMode('login'); });
+  ckEl('ckTabReg').addEventListener('click', function(){ ckSetAuthMode('register'); });
+  ckEl('ckGuest').addEventListener('click', function(){
+    ck.guest = true; ckEl('ckAuth').style.display = 'none';
+  });
+  function ckRefreshAuth(){
+    ckApi('GET', '/api/me').then(function(res){
+      if (res.status === 200 && res.j.user) {
+        ck.me = res.j.user; ck.guest = false;
+        ckEl('ckAuth').style.display = 'none';
+        ckEl('ckUser').style.display = '';
+        ckEl('ckUserText').textContent = '已登录：' + res.j.user.phone;
+        if (!ckEl('ckPhone').value) ckEl('ckPhone').value = res.j.user.phone;
+        ckApi('GET', '/api/my/addresses').then(function(r2){
+          var list = (r2.j && r2.j.addresses) || [];
+          var d = null;
+          for (var i = 0; i < list.length; i++) if (list[i].is_default) d = list[i];
+          if (!d && list.length) d = list[0];
+          if (d && !ckEl('ckRecipient').value) {
+            ckEl('ckRecipient').value = d.recipient || '';
+            ckEl('ckPhone').value = d.phone || ckEl('ckPhone').value;
+            ckEl('ckProvince').value = d.province || '';
+            ckEl('ckCity').value = d.city || '';
+            ckEl('ckDistrict').value = d.district || '';
+            ckEl('ckDetail').value = d.address_detail || '';
+          }
+        });
+      } else {
+        ck.me = null;
+        ckEl('ckUser').style.display = 'none';
+        ckEl('ckAuth').style.display = ck.guest ? 'none' : '';
+      }
+    });
+  }
+  ckEl('ckAuthBtn').addEventListener('click', function(){
+    var phone = ckEl('ckAuthPhone').value.trim();
+    var pw = ckEl('ckAuthPw').value;
+    ckEl('ckAuthErr').textContent = '';
+    if (!/^1\d{10}$/.test(phone)) { ckEl('ckAuthErr').textContent = '手机号格式不对（11 位）。'; return; }
+    if (pw.length < 6) { ckEl('ckAuthErr').textContent = '密码至少 6 位。'; return; }
+    var btn = ckEl('ckAuthBtn'); btn.disabled = true;
+    ckApi('POST', ck.authMode === 'login' ? '/api/login' : '/api/register', {phone: phone, password: pw})
+      .then(function(res){
+        btn.disabled = false;
+        if (res.status === 200 || res.status === 201) { ckRefreshAuth(); }
+        else if (res.status === 409) { ckEl('ckAuthErr').textContent = '这个手机号已注册，切到「登录」直接登录。'; }
+        else if (res.status === 401) { ckEl('ckAuthErr').textContent = '手机号或密码不正确。'; }
+        else { ckEl('ckAuthErr').textContent = (res.j && res.j.message) || '提交失败，请再试一次。'; }
+      })
+      .catch(function(){ btn.disabled = false; ckEl('ckAuthErr').textContent = '网络异常，请再试一次。'; });
+  });
+  ckEl('ckLogout').addEventListener('click', function(){
+    ckApi('POST', '/api/logout', {}).then(function(){ ck.me = null; ck.guest = false; ckRefreshAuth(); });
+  });
+
+  // ---- 建单 ----
+  ckEl('ckSubmit').addEventListener('click', function(){
+    var payload = {
+      tier: ck.tier,
+      recipient: ckEl('ckRecipient').value.trim(),
+      phone: ckEl('ckPhone').value.trim(),
+      province: ckEl('ckProvince').value.trim(),
+      city: ckEl('ckCity').value.trim(),
+      district: ckEl('ckDistrict').value.trim(),
+      address_detail: ckEl('ckDetail').value.trim(),
+      wechat: ckEl('ckWechat').value.trim(),
+      car: ckEl('ckCar').value.trim()
+    };
+    ckEl('ckErr').textContent = '';
+    if (!payload.recipient) { ckEl('ckErr').textContent = '请填收货人。'; return; }
+    if (!/^1\d{10}$/.test(payload.phone)) { ckEl('ckErr').textContent = '收货手机号格式不对（11 位）。'; return; }
+    if (!payload.address_detail) { ckEl('ckErr').textContent = '请填详细地址。'; return; }
+    var btn = ckEl('ckSubmit'); btn.disabled = true; btn.textContent = '正在建单…';
+    ckApi('POST', '/api/order', payload).then(function(res){
+      btn.disabled = false; btn.textContent = '提交订单并支付';
+      if (res.status !== 201) {
+        ckEl('ckErr').textContent = (res.j && res.j.message) || '建单失败，请检查信息后再试。';
+        return;
+      }
+      ck.orderId = res.j.order_id; ck.phone = payload.phone;
+      var t = CK_TIERS[ck.tier];
+      ckEl('ckPayPlan').textContent = '阿童木 P4-CAN 组装套件 · ' + t.name;
+      ckEl('ckPayAmt').textContent = '¥' + res.j.amount;
+      ckEl('ckPayOrder').textContent = '订单号 ' + ck.orderId + '（请在 2 小时内完成支付）';
+      ckEl('ckPayErr').textContent = '';
+      ckEl('ckWxArea').style.display = 'none';
+      ckEl('ckAliArea').style.display = 'none';
+      ckShowStep('pay');
+      ckStartPoll();
+    }).catch(function(){
+      btn.disabled = false; btn.textContent = '提交订单并支付';
+      ckEl('ckErr').textContent = '网络异常，建单失败，请再试一次。';
+    });
+  });
+
+  // ---- 支付 ----
+  ckEl('ckPayWx').addEventListener('click', function(){
+    ckEl('ckPayErr').textContent = '';
+    ckApi('POST', '/api/pay/wechat', {order_id: ck.orderId}).then(function(res){
+      if (res.status !== 200) {
+        ckEl('ckPayErr').textContent = (res.j && (res.j.message || res.j.error)) || '微信支付暂时不可用，请用支付宝或联系客服。';
+        return;
+      }
+      if (res.j.pay_type === 'native' && res.j.code_url) {
+        ckEl('ckWxQr').src = '/api/qr?text=' + encodeURIComponent(res.j.code_url);
+        ckEl('ckWxArea').style.display = '';
+      } else if (res.j.h5_url) {
+        location.href = res.j.h5_url;
+      }
+    }).catch(function(){ ckEl('ckPayErr').textContent = '网络异常，请再试一次。'; });
+  });
+  ckEl('ckPayAli').addEventListener('click', function(){
+    ckEl('ckPayErr').textContent = '';
+    ckApi('POST', '/api/pay/alipay', {order_id: ck.orderId}).then(function(res){
+      if (res.status !== 200 || !res.j.pay_url) {
+        ckEl('ckPayErr').textContent = (res.j && (res.j.message || res.j.error)) || '支付宝暂时不可用，请稍后再试或联系客服。';
+        return;
+      }
+      ckEl('ckAliLink').href = res.j.pay_url;
+      ckEl('ckAliArea').style.display = '';
+      window.open(res.j.pay_url, '_blank');
+    }).catch(function(){ ckEl('ckPayErr').textContent = '网络异常，请再试一次。'; });
+  });
+
+  // ---- 轮询与成功 ----
+  function ckRenderTimeline(nodes){
+    var html = '';
+    (nodes || []).forEach(function(n){
+      html += '<li class="' + (n.current ? 'cur' : (n.done ? 'done' : '')) + '"><span class="dot"></span>' +
+        n.label + (n.time ? '<span class="tt">' + n.time.replace('T', ' ') + '</span>' : '') + '</li>';
+    });
+    return html;
+  }
+  function ckStartPoll(){
+    ckStopPoll(); ck.pollCount = 0;
+    ck.pollTimer = setInterval(function(){
+      ck.pollCount++;
+      if (ck.pollCount > 120) { ckStopPoll(); ckEl('ckPollNote').textContent = '还没等到付款确认。如果已经付了款，稍后到「我的订单」里看即可。'; return; }
+      fetch('/api/order/' + ck.orderId).then(function(r){ return r.json(); }).then(function(j){
+        if (j.status === 'PAID') {
+          ckStopPoll();
+          ckEl('ckDoneOrder').textContent = '订单号 ' + ck.orderId;
+          ckShowStep('done');
+          fetch('/api/track/' + ck.orderId + '?phone=' + encodeURIComponent(ck.phone.slice(-4)))
+            .then(function(r){ return r.json(); })
+            .then(function(t){ ckEl('ckTimeline').innerHTML = ckRenderTimeline(t.timeline); })
+            .catch(function(){});
+        }
+      }).catch(function(){});
+    }, 3000);
+  }
+  ckEl('ckGoAccount').addEventListener('click', function(){ location.href = 'account.html'; });
+  ckEl('ckGoDownload').addEventListener('click', function(){
+    ckClose();
+    var el = document.getElementById('download');
+    if (el) el.scrollIntoView({behavior: 'smooth'});
+  });
+
+  // 导航登录入口：已登录时显示「我的订单」
+  (function(){
+    var nav = document.getElementById('navAccount');
+    if (!nav) return;
+    fetch('/api/me').then(function(r){ return r.ok ? r.json() : null; }).then(function(j){
+      if (j && j.user) nav.textContent = '我的订单';
+    }).catch(function(){});
+  })();
+</script>
+
 <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 </body>
 </html>

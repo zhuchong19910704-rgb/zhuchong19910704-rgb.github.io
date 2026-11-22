@@ -13,17 +13,36 @@
 
 接口：
   GET  /api/health
-  POST /api/order                 建单
+  POST /api/order                 建单（必填收货人 + 详细地址 + 手机号）
   POST /api/pay/alipay            生成支付宝支付 URL（page/wap 按 UA 选）
   POST /api/pay/notify/alipay     支付宝异步回调（验签后置 PAID）
   POST /api/pay/wechat            微信下单（Native 扫码 / H5 按 UA 选）
   POST /api/pay/notify/wechat     微信异步回调（验签+解密后置 PAID）
   GET  /api/order/<order_id>      查单（手机号脱敏）
+  POST /api/register              买家注册（手机号 + 密码，会话 Cookie）
+  POST /api/login                 买家登录
+  POST /api/logout                买家退出
+  GET  /api/me                    当前买家
+  GET  /api/my/orders             我的订单（需登录，含履约状态与快递单号）
+  GET  /api/my/addresses          我的地址簿（需登录）
+  POST /api/my/addresses          新增地址（需登录）
+  POST /api/my/addresses/<id>/default  设默认地址（需登录）
+  DELETE /api/my/addresses/<id>   删除地址（需登录）
+  GET  /api/track/<order_id>?phone=  游客订单追踪（订单号 + 手机号后四位）
+  POST /api/admin/login           卖家后台登录（ADMIN_TOKEN 换会话 Cookie）
+  POST /api/admin/logout          卖家后台退出
+  GET  /api/admin/session         后台会话状态
+  GET  /api/admin/orders?status=  全部订单（需后台鉴权，含完整地址）
+  POST /api/admin/order/<id>/fulfillment  改履约状态 / 快递（需后台鉴权）
+  GET  /api/qr?text=              离线生成 QR 二维码 PNG（微信扫码支付用）
 
 环境变量见 README.md。
 """
 
 import base64
+import binascii
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -31,8 +50,10 @@ import re
 import secrets
 import sqlite3
 import string
+import struct
 import threading
 import time
+import zlib
 from datetime import datetime
 from decimal import Decimal
 from urllib.error import HTTPError
@@ -63,6 +84,49 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("ORDERS_DB_PATH", os.path.join(BASE_DIR, "orders.db"))
 HOST = os.environ.get("PAY_HOST", "127.0.0.1")
 PORT = int(os.environ.get("PAY_PORT", "9000"))
+
+# ---------------------------------------------------------------- 商城（账号 / 后台 / 履约）
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "").strip()
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
+USER_COOKIE = "p4session"
+ADMIN_COOKIE = "p4admin"
+SESSION_TTL_SECONDS = 30 * 86400  # 买家会话 30 天
+ADMIN_SESSION_TTL_SECONDS = 12 * 3600  # 后台会话 12 小时
+
+FULFILLMENT_STATUSES = [
+    "AWAITING_PAYMENT",
+    "PAID",
+    "PREPARING",
+    "SHIPPED",
+    "IN_TRANSIT",
+    "DELIVERED",
+    "COMPLETED",
+    "AFTER_SALE",
+]
+FULFILLMENT_LABELS = {
+    "AWAITING_PAYMENT": "待付款",
+    "PAID": "付款成功（待发货）",
+    "PREPARING": "备货中",
+    "SHIPPED": "已发货",
+    "IN_TRANSIT": "运输中",
+    "DELIVERED": "已签收",
+    "COMPLETED": "已完成",
+    "AFTER_SALE": "售后中",
+}
+# 时间线主线顺序（AFTER_SALE 为旁路状态，不进主线）
+FULFILLMENT_FLOW = [
+    "AWAITING_PAYMENT",
+    "PAID",
+    "PREPARING",
+    "SHIPPED",
+    "IN_TRANSIT",
+    "DELIVERED",
+    "COMPLETED",
+]
 
 ALIPAY_GATEWAY_DEFAULT = "https://openapi.alipay.com/gateway.do"
 
@@ -143,6 +207,48 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 """
 
+SCHEMA_STORE = """
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone         TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at    TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    token      TEXT PRIMARY KEY,
+    user_id    INTEGER,
+    kind       TEXT NOT NULL DEFAULT 'user',
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS addresses (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL,
+    recipient      TEXT NOT NULL DEFAULT '',
+    phone          TEXT NOT NULL DEFAULT '',
+    province       TEXT NOT NULL DEFAULT '',
+    city           TEXT NOT NULL DEFAULT '',
+    district       TEXT NOT NULL DEFAULT '',
+    address_detail TEXT NOT NULL DEFAULT '',
+    is_default     INTEGER NOT NULL DEFAULT 0,
+    created_at     TEXT NOT NULL
+);
+"""
+
+# 订单表新增列（与 wechat_transaction_id 相同的 ALTER TABLE 迁移手法）
+ORDER_NEW_COLUMNS = {
+    "user_id": "INTEGER",
+    "recipient": "TEXT DEFAULT ''",
+    "province": "TEXT DEFAULT ''",
+    "city": "TEXT DEFAULT ''",
+    "district": "TEXT DEFAULT ''",
+    "address_detail": "TEXT DEFAULT ''",
+    "fulfillment_status": "TEXT DEFAULT 'AWAITING_PAYMENT'",
+    "courier": "TEXT DEFAULT ''",
+    "tracking_no": "TEXT DEFAULT ''",
+    "status_updated_at": "TEXT DEFAULT ''",
+}
+
 
 def db_connect():
     conn = sqlite3.connect(DB_PATH, timeout=10)
@@ -153,11 +259,23 @@ def db_connect():
 def db_init():
     with _db_lock, db_connect() as conn:
         conn.execute(SCHEMA)
+        conn.executescript(SCHEMA_STORE)
         # 老库迁移：早期订单表没有微信交易号列，补上
         cols = [row[1] for row in conn.execute("PRAGMA table_info(orders)")]
         if "wechat_transaction_id" not in cols:
             conn.execute(
                 "ALTER TABLE orders ADD COLUMN wechat_transaction_id TEXT DEFAULT ''"
+            )
+            cols.append("wechat_transaction_id")
+        fulfillment_just_added = "fulfillment_status" not in cols
+        for col, ddl in ORDER_NEW_COLUMNS.items():
+            if col not in cols:
+                conn.execute("ALTER TABLE orders ADD COLUMN %s %s" % (col, ddl))
+        if fulfillment_just_added:
+            # 存量订单回填：已付款的老订单履约状态对齐到 PAID
+            conn.execute(
+                "UPDATE orders SET fulfillment_status='PAID'"
+                " WHERE status='PAID' AND fulfillment_status='AWAITING_PAYMENT'"
             )
 
 
@@ -173,7 +291,9 @@ def db_insert_order(order):
     with _db_lock, db_connect() as conn:
         conn.execute(
             "INSERT INTO orders (order_id, tier, tier_name, amount_cents, phone,"
-            " wechat, car, status, created_at) VALUES (?,?,?,?,?,?,?,'PENDING',?)",
+            " wechat, car, status, created_at, user_id, recipient, province, city,"
+            " district, address_detail, fulfillment_status, status_updated_at)"
+            " VALUES (?,?,?,?,?,?,?,'PENDING',?,?,?,?,?,?,?,'AWAITING_PAYMENT',?)",
             (
                 order["order_id"],
                 order["tier"],
@@ -183,26 +303,239 @@ def db_insert_order(order):
                 order["wechat"],
                 order["car"],
                 order["created_at"],
+                order.get("user_id"),
+                order.get("recipient", ""),
+                order.get("province", ""),
+                order.get("city", ""),
+                order.get("district", ""),
+                order.get("address_detail", ""),
+                order["created_at"],
             ),
         )
 
 
 def db_mark_paid(order_id, trade_no):
+    now = datetime.now().isoformat(timespec="seconds")
     with _db_lock, db_connect() as conn:
         conn.execute(
-            "UPDATE orders SET status='PAID', alipay_trade_no=?, paid_at=?"
+            "UPDATE orders SET status='PAID', alipay_trade_no=?, paid_at=?,"
+            " fulfillment_status=CASE WHEN fulfillment_status='AWAITING_PAYMENT'"
+            " THEN 'PAID' ELSE fulfillment_status END, status_updated_at=?"
             " WHERE order_id=?",
-            (trade_no, datetime.now().isoformat(timespec="seconds"), order_id),
+            (trade_no, now, now, order_id),
         )
 
 
 def db_mark_paid_wechat(order_id, transaction_id):
+    now = datetime.now().isoformat(timespec="seconds")
     with _db_lock, db_connect() as conn:
         conn.execute(
-            "UPDATE orders SET status='PAID', wechat_transaction_id=?, paid_at=?"
+            "UPDATE orders SET status='PAID', wechat_transaction_id=?, paid_at=?,"
+            " fulfillment_status=CASE WHEN fulfillment_status='AWAITING_PAYMENT'"
+            " THEN 'PAID' ELSE fulfillment_status END, status_updated_at=?"
             " WHERE order_id=?",
-            (transaction_id, datetime.now().isoformat(timespec="seconds"), order_id),
+            (transaction_id, now, now, order_id),
         )
+
+
+def db_list_orders_by_user(user_id):
+    with _db_lock, db_connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_list_all_orders(fulfillment_status=None):
+    sql = "SELECT * FROM orders"
+    args = ()
+    if fulfillment_status:
+        sql += " WHERE fulfillment_status = ?"
+        args = (fulfillment_status,)
+    sql += " ORDER BY created_at DESC"
+    with _db_lock, db_connect() as conn:
+        rows = conn.execute(sql, args).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_update_fulfillment(order_id, updates):
+    """updates 可含 fulfillment_status / courier / tracking_no；同步刷新 status_updated_at。"""
+    allowed = ("fulfillment_status", "courier", "tracking_no")
+    fields = {k: v for k, v in updates.items() if k in allowed}
+    if not fields:
+        return False
+    fields["status_updated_at"] = datetime.now().isoformat(timespec="seconds")
+    set_clause = ", ".join("%s=?" % k for k in fields)
+    with _db_lock, db_connect() as conn:
+        cur = conn.execute(
+            "UPDATE orders SET %s WHERE order_id=?" % set_clause,
+            tuple(fields.values()) + (order_id,),
+        )
+        return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------- 账号 / 会话
+def hash_password(password):
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200_000)
+    return "pbkdf2_sha256$200000$%s$%s" % (salt.hex(), dk.hex())
+
+
+def verify_password(password, stored):
+    try:
+        _algo, iters, salt_hex, hash_hex = stored.split("$")
+        dk = hashlib.pbkdf2_hmac(
+            "sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), int(iters)
+        )
+        return hmac.compare_digest(dk.hex(), hash_hex)
+    except Exception:
+        return False
+
+
+def db_create_user(phone, password_hash):
+    try:
+        with _db_lock, db_connect() as conn:
+            cur = conn.execute(
+                "INSERT INTO users (phone, password_hash, created_at) VALUES (?,?,?)",
+                (phone, password_hash, datetime.now().isoformat(timespec="seconds")),
+            )
+            return cur.lastrowid
+    except sqlite3.IntegrityError:
+        return None
+
+
+def db_get_user_by_phone(phone):
+    with _db_lock, db_connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE phone = ?", (phone,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def db_get_user_by_id(user_id):
+    with _db_lock, db_connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def db_create_session(user_id, kind, ttl_seconds):
+    token = secrets.token_urlsafe(32)
+    now = datetime.now()
+    from datetime import timedelta
+
+    with _db_lock, db_connect() as conn:
+        conn.execute(
+            "INSERT INTO sessions (token, user_id, kind, created_at, expires_at)"
+            " VALUES (?,?,?,?,?)",
+            (
+                token,
+                user_id,
+                kind,
+                now.isoformat(timespec="seconds"),
+                (now + timedelta(seconds=ttl_seconds)).isoformat(timespec="seconds"),
+            ),
+        )
+    return token
+
+
+def db_get_session(token):
+    if not token:
+        return None
+    with _db_lock, db_connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM sessions WHERE token = ?", (token,)
+        ).fetchone()
+        if not row:
+            return None
+        sess = dict(row)
+        if sess["expires_at"] <= datetime.now().isoformat(timespec="seconds"):
+            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            return None
+    return sess
+
+
+def db_delete_session(token):
+    if not token:
+        return
+    with _db_lock, db_connect() as conn:
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+
+
+# ---------------------------------------------------------------- 地址簿
+def db_list_addresses(user_id):
+    with _db_lock, db_connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM addresses WHERE user_id = ?"
+            " ORDER BY is_default DESC, id ASC",
+            (user_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_insert_address(user_id, addr, make_default=False):
+    with _db_lock, db_connect() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM addresses WHERE user_id = ?", (user_id,)
+        ).fetchone()[0]
+        is_default = 1 if (make_default or count == 0) else 0
+        if is_default:
+            conn.execute(
+                "UPDATE addresses SET is_default = 0 WHERE user_id = ?", (user_id,)
+            )
+        cur = conn.execute(
+            "INSERT INTO addresses (user_id, recipient, phone, province, city,"
+            " district, address_detail, is_default, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                user_id,
+                addr.get("recipient", ""),
+                addr.get("phone", ""),
+                addr.get("province", ""),
+                addr.get("city", ""),
+                addr.get("district", ""),
+                addr.get("address_detail", ""),
+                is_default,
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+        return cur.lastrowid
+
+
+def db_save_order_address(user_id, addr):
+    """下单时把收货地址存进地址簿：完全相同的地址不重复存。"""
+    existing = db_list_addresses(user_id)
+    keys = ("recipient", "phone", "province", "city", "district", "address_detail")
+    for row in existing:
+        if all((row.get(k) or "") == addr.get(k, "") for k in keys):
+            return row["id"]
+    return db_insert_address(user_id, addr)
+
+
+def db_set_default_address(user_id, address_id):
+    with _db_lock, db_connect() as conn:
+        cur = conn.execute(
+            "SELECT id FROM addresses WHERE id = ? AND user_id = ?",
+            (address_id, user_id),
+        ).fetchone()
+        if not cur:
+            return False
+        conn.execute(
+            "UPDATE addresses SET is_default = 0 WHERE user_id = ?", (user_id,)
+        )
+        conn.execute(
+            "UPDATE addresses SET is_default = 1 WHERE id = ?", (address_id,)
+        )
+        return True
+
+
+def db_delete_address(user_id, address_id):
+    with _db_lock, db_connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM addresses WHERE id = ? AND user_id = ?",
+            (address_id, user_id),
+        )
+        return cur.rowcount > 0
 
 
 # ---------------------------------------------------------------- 工具
@@ -231,6 +564,162 @@ def json_response(status, payload):
 
 def text_response(status, text):
     return status, "text/plain; charset=utf-8", text.encode("utf-8")
+
+
+def binary_response(status, content_type, body, extra_headers=None):
+    headers = {"Cache-Control": "no-store"}
+    if extra_headers:
+        headers.update(extra_headers)
+    return status, content_type, body, headers
+
+
+def with_cookie(resp, name, value, max_age):
+    """给 (status, ctype, body) 三元组挂上 Set-Cookie，返回四元组。"""
+    status, ctype, body = resp[0], resp[1], resp[2]
+    cookie = "%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d" % (
+        name,
+        value,
+        max_age,
+    )
+    if COOKIE_SECURE:
+        cookie += "; Secure"
+    return status, ctype, body, {"Set-Cookie": cookie}
+
+
+def parse_cookies(headers):
+    raw = (headers or {}).get("cookie", "")
+    out = {}
+    for part in raw.split(";"):
+        part = part.strip()
+        if "=" in part:
+            k, v = part.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def current_user(headers):
+    """从买家会话 Cookie 解析当前用户；未登录返回 None。"""
+    token = parse_cookies(headers).get(USER_COOKIE, "")
+    sess = db_get_session(token)
+    if not sess or sess.get("kind") != "user" or not sess.get("user_id"):
+        return None
+    return db_get_user_by_id(sess["user_id"])
+
+
+def is_admin_request(headers):
+    """后台鉴权：Bearer ADMIN_TOKEN 直通，或后台会话 Cookie。"""
+    if not ADMIN_TOKEN:
+        return False
+    auth = (headers or {}).get("authorization", "")
+    if auth.startswith("Bearer "):
+        if hmac.compare_digest(auth[len("Bearer ") :].strip(), ADMIN_TOKEN):
+            return True
+    token = parse_cookies(headers).get(ADMIN_COOKIE, "")
+    sess = db_get_session(token)
+    return bool(sess and sess.get("kind") == "admin")
+
+
+def public_user(user):
+    return {"id": user["id"], "phone": user["phone"], "created_at": user["created_at"]}
+
+
+def build_timeline(order):
+    """履约时间线：主线节点 + 是否到达 / 是否当前。中间节点无独立时间戳，只给
+    下单（created_at）、付款（paid_at）与当前状态（status_updated_at）。"""
+    current = order.get("fulfillment_status") or "AWAITING_PAYMENT"
+    times = {
+        "AWAITING_PAYMENT": order.get("created_at"),
+        "PAID": order.get("paid_at") or None,
+    }
+    if current in FULFILLMENT_FLOW:
+        times[current] = order.get("status_updated_at") or times.get(current)
+    nodes = []
+    if current == "AFTER_SALE":
+        for key in FULFILLMENT_FLOW:
+            nodes.append(
+                {
+                    "key": key,
+                    "label": FULFILLMENT_LABELS[key],
+                    "time": times.get(key),
+                    "done": False,
+                    "current": False,
+                }
+            )
+        nodes.append(
+            {
+                "key": "AFTER_SALE",
+                "label": FULFILLMENT_LABELS["AFTER_SALE"],
+                "time": order.get("status_updated_at") or None,
+                "done": False,
+                "current": True,
+            }
+        )
+        return nodes
+    idx = FULFILLMENT_FLOW.index(current)
+    for i, key in enumerate(FULFILLMENT_FLOW):
+        nodes.append(
+            {
+                "key": key,
+                "label": FULFILLMENT_LABELS[key],
+                "time": times.get(key),
+                "done": i < idx,
+                "current": i == idx,
+            }
+        )
+    return nodes
+
+
+def order_self_view(order):
+    """买家本人视图：完整收货地址、履约与快递信息，手机号脱敏。"""
+    return {
+        "order_id": order["order_id"],
+        "tier": order["tier"],
+        "tier_name": order["tier_name"],
+        "amount": cents_to_yuan_str(order["amount_cents"]),
+        "status": order["status"],
+        "fulfillment_status": order.get("fulfillment_status") or "AWAITING_PAYMENT",
+        "fulfillment_label": FULFILLMENT_LABELS.get(
+            order.get("fulfillment_status") or "AWAITING_PAYMENT", ""
+        ),
+        "phone": mask_phone(order["phone"]),
+        "wechat": order.get("wechat") or "",
+        "car": order.get("car") or "",
+        "recipient": order.get("recipient") or "",
+        "province": order.get("province") or "",
+        "city": order.get("city") or "",
+        "district": order.get("district") or "",
+        "address_detail": order.get("address_detail") or "",
+        "courier": order.get("courier") or "",
+        "tracking_no": order.get("tracking_no") or "",
+        "created_at": order["created_at"],
+        "paid_at": order["paid_at"] or None,
+        "status_updated_at": order.get("status_updated_at") or None,
+        "timeline": build_timeline(order),
+    }
+
+
+def order_admin_view(order):
+    """卖家后台视图：完整电话与地址（仅后台鉴权后可见）。"""
+    view = order_self_view(order)
+    view["phone"] = order["phone"]
+    view["alipay_trade_no"] = order.get("alipay_trade_no") or ""
+    view["wechat_transaction_id"] = order.get("wechat_transaction_id") or ""
+    view["user_id"] = order.get("user_id")
+    return view
+
+
+def address_view(addr):
+    return {
+        "id": addr["id"],
+        "recipient": addr.get("recipient") or "",
+        "phone": addr.get("phone") or "",
+        "province": addr.get("province") or "",
+        "city": addr.get("city") or "",
+        "district": addr.get("district") or "",
+        "address_detail": addr.get("address_detail") or "",
+        "is_default": bool(addr.get("is_default")),
+        "created_at": addr.get("created_at"),
+    }
 
 
 # ---------------------------------------------------------------- RSA2（支付宝）
@@ -304,12 +793,384 @@ def rsa2_verify(content, signature_b64, public_key_path):
         return False
 
 
+# ---------------------------------------------------------------- QR 二维码（纯标准库）
+# 字节模式 + ECC 等级 M，版本 1–10 自动选小。微信 Native 的 code_url 约 40 字符，
+# V4-M 即可容纳。实现按 ISO/IEC 18004：GF(256) Reed-Solomon、交织、掩码罚分选优。
+_QR_ECC_M = {
+    # version: (每块 ECC 码字数, [(块数, 每块数据码字数), ...])
+    1: (10, [(1, 16)]),
+    2: (16, [(1, 28)]),
+    3: (26, [(1, 44)]),
+    4: (18, [(2, 32)]),
+    5: (24, [(2, 43)]),
+    6: (16, [(4, 27)]),
+    7: (18, [(4, 31)]),
+    8: (22, [(2, 38), (2, 39)]),
+    9: (22, [(3, 36), (2, 37)]),
+    10: (26, [(4, 43), (1, 44)]),
+}
+_QR_ALIGN_CENTERS = {
+    1: [],
+    2: [6, 18],
+    3: [6, 22],
+    4: [6, 26],
+    5: [6, 30],
+    6: [6, 34],
+    7: [6, 22, 38],
+    8: [6, 24, 42],
+    9: [6, 26, 46],
+    10: [6, 28, 50],
+}
+_QR_REMAINDER_BITS = {1: 0, 2: 7, 3: 7, 4: 7, 5: 7, 6: 7, 7: 0, 8: 0, 9: 0, 10: 0}
+
+_QR_GF_EXP = [0] * 512
+_QR_GF_LOG = [0] * 256
+_x = 1
+for _i in range(255):
+    _QR_GF_EXP[_i] = _x
+    _QR_GF_LOG[_x] = _i
+    _x <<= 1
+    if _x & 0x100:
+        _x ^= 0x11D
+for _i in range(255, 512):
+    _QR_GF_EXP[_i] = _QR_GF_EXP[_i - 255]
+
+
+def _gf_mul(a, b):
+    if a == 0 or b == 0:
+        return 0
+    return _QR_GF_EXP[_QR_GF_LOG[a] + _QR_GF_LOG[b]]
+
+
+def _rs_divisor(degree):
+    result = [0] * (degree - 1) + [1]
+    root = 1
+    for _ in range(degree):
+        for j in range(len(result)):
+            result[j] = _gf_mul(result[j], root)
+            if j + 1 < len(result):
+                result[j] ^= result[j + 1]
+        root = _gf_mul(root, 0x02)
+    return result
+
+
+def _rs_remainder(data, divisor):
+    result = [0] * len(divisor)
+    for b in data:
+        factor = b ^ result.pop(0)
+        result.append(0)
+        for i, coef in enumerate(divisor):
+            result[i] ^= _gf_mul(coef, factor)
+    return result
+
+
+def _poly_mod(value, gen):
+    deg = gen.bit_length() - 1
+    v = value
+    while v.bit_length() - 1 >= deg:
+        v ^= gen << ((v.bit_length() - 1) - deg)
+    return v
+
+
+def _qr_format_bits(mask):
+    data = (0b00 << 3) | mask  # ECC 等级 M 的指示位为 00
+    rem = _poly_mod(data << 10, 0x537)
+    return ((data << 10) | rem) ^ 0x5412
+
+
+def _qr_version_bits(version):
+    rem = _poly_mod(version << 12, 0x1F25)
+    return (version << 12) | rem
+
+
+def _qr_data_codewords(data_bytes, version):
+    """数据码字 → 分块纠错 → 交织，返回完整码字序列。"""
+    ecc_len, block_spec = _QR_ECC_M[version]
+    total_data = sum(n * c for n, c in block_spec)
+    capacity_bits = total_data * 8
+    bits = []
+
+    def append(val, length):
+        for i in range(length - 1, -1, -1):
+            bits.append((val >> i) & 1)
+
+    append(0b0100, 4)  # 字节模式
+    append(len(data_bytes), 8 if version <= 9 else 16)
+    for b in data_bytes:
+        append(b, 8)
+    append(0, min(4, capacity_bits - len(bits)))  # 终止符
+    append(0, (-len(bits)) % 8)  # 对齐到字节
+    pad = 0xEC
+    while len(bits) < capacity_bits:
+        append(pad, 8)
+        pad ^= 0xEC ^ 0x11
+    codewords = [
+        sum(bits[i + j] << (7 - j) for j in range(8))
+        for i in range(0, capacity_bits, 8)
+    ]
+    blocks, eccs, k = [], [], 0
+    divisor = _rs_divisor(ecc_len)
+    for num, dcw in block_spec:
+        for _ in range(num):
+            block = codewords[k : k + dcw]
+            k += dcw
+            blocks.append(block)
+            eccs.append(_rs_remainder(block, divisor))
+    result = []
+    for i in range(max(len(b) for b in blocks)):
+        for b in blocks:
+            if i < len(b):
+                result.append(b[i])
+    for i in range(ecc_len):
+        for e in eccs:
+            result.append(e[i])
+    return result
+
+
+def _qr_base_matrix(version):
+    """画功能图形（定位/分隔/校正/定时/版本信息），返回 (modules, reserved)。"""
+    size = version * 4 + 17
+    modules = [[0] * size for _ in range(size)]
+    reserved = [[False] * size for _ in range(size)]
+
+    def setf(r, c, v):
+        if 0 <= r < size and 0 <= c < size:
+            modules[r][c] = v
+            reserved[r][c] = True
+
+    for r0, c0 in ((0, 0), (0, size - 7), (size - 7, 0)):
+        for dr in range(-1, 8):
+            for dc in range(-1, 8):
+                if 0 <= dr <= 6 and 0 <= dc <= 6:
+                    v = (
+                        1
+                        if (
+                            dr in (0, 6)
+                            or dc in (0, 6)
+                            or (2 <= dr <= 4 and 2 <= dc <= 4)
+                        )
+                        else 0
+                    )
+                else:
+                    v = 0  # 分隔符（白边）
+                setf(r0 + dr, c0 + dc, v)
+    for i in range(8, size - 8):  # 定时图形
+        v = 1 if i % 2 == 0 else 0
+        setf(6, i, v)
+        setf(i, 6, v)
+    centers = _QR_ALIGN_CENTERS[version]  # 校正图形：只跳过与定位图形重叠的三角组合
+    for r in centers:
+        for c in centers:
+            if (
+                (r == centers[0] and c == centers[0])
+                or (r == centers[0] and c == centers[-1])
+                or (r == centers[-1] and c == centers[0])
+            ):
+                continue
+            for dr in range(-2, 3):
+                for dc in range(-2, 3):
+                    v = 1 if (max(abs(dr), abs(dc)) == 2 or (dr == 0 and dc == 0)) else 0
+                    setf(r + dr, c + dc, v)
+    for i in range(9):  # 保留格式信息区
+        if i != 6:
+            reserved[8][i] = True
+            reserved[i][8] = True
+    for i in range(8):
+        reserved[8][size - 1 - i] = True
+        reserved[size - 1 - i][8] = True
+    modules[size - 8][8] = 1  # 暗模块
+    reserved[size - 8][8] = True
+    if version >= 7:  # 版本信息
+        bits = _qr_version_bits(version)
+        for i in range(18):
+            v = (bits >> i) & 1
+            r1, c1 = i // 3, size - 11 + i % 3
+            r2, c2 = size - 11 + i % 3, i // 3
+            modules[r1][c1] = v
+            reserved[r1][c1] = True
+            modules[r2][c2] = v
+            reserved[r2][c2] = True
+    return modules, reserved
+
+
+def _qr_mask_bit(mask, r, c):
+    if mask == 0:
+        return (r + c) % 2 == 0
+    if mask == 1:
+        return r % 2 == 0
+    if mask == 2:
+        return c % 3 == 0
+    if mask == 3:
+        return (r + c) % 3 == 0
+    if mask == 4:
+        return (r // 2 + c // 3) % 2 == 0
+    if mask == 5:
+        return (r * c) % 2 + (r * c) % 3 == 0
+    if mask == 6:
+        return ((r * c) % 2 + (r * c) % 3) % 2 == 0
+    return ((r + c) % 2 + (r * c) % 3) % 2 == 0  # mask 7
+
+
+def _qr_set_format(modules, mask):
+    size = len(modules)
+    bits = _qr_format_bits(mask)
+    for i in range(6):
+        modules[i][8] = (bits >> i) & 1
+    modules[7][8] = (bits >> 6) & 1
+    modules[8][8] = (bits >> 7) & 1
+    modules[8][7] = (bits >> 8) & 1
+    for i in range(9, 15):
+        modules[8][14 - i] = (bits >> i) & 1
+    for i in range(8):
+        modules[8][size - 1 - i] = (bits >> i) & 1
+    for i in range(8, 15):
+        modules[size - 15 + i][8] = (bits >> i) & 1
+    modules[size - 8][8] = 1
+
+
+def _qr_penalty(modules):
+    size = len(modules)
+    penalty = 0
+    lines = list(modules) + [[modules[r][c] for r in range(size)] for c in range(size)]
+    for line in lines:  # 规则 1：同色游程 ≥5
+        run_color, run_len = line[0], 1
+        for v in line[1:]:
+            if v == run_color:
+                run_len += 1
+            else:
+                if run_len >= 5:
+                    penalty += run_len - 2
+                run_color, run_len = v, 1
+        if run_len >= 5:
+            penalty += run_len - 2
+    for r in range(size - 1):  # 规则 2：2x2 同色块
+        for c in range(size - 1):
+            v = modules[r][c]
+            if v == modules[r][c + 1] == modules[r + 1][c] == modules[r + 1][c + 1]:
+                penalty += 3
+    for line in lines:  # 规则 3：1011101 且一侧有 4 个白模块
+        bits = 0
+        for idx, v in enumerate(line):
+            bits = ((bits << 1) & 0x7FF) | v
+            if idx >= 10 and bits in (0b10111010000, 0b00001011101):
+                penalty += 40
+    dark = sum(sum(row) for row in modules)  # 规则 4：黑白比例偏离 50%
+    total = size * size
+    k = (abs(dark * 20 - total * 10) + total - 1) // total - 1
+    penalty += k * 10
+    return penalty
+
+
+def qr_encode(text):
+    """返回 (version, mask, matrix)；matrix 为 0/1 二维列表。"""
+    data = text.encode("utf-8")
+    version = None
+    for v in range(1, 11):
+        _ecc, spec = _QR_ECC_M[v]
+        total_data = sum(n * c for n, c in spec)
+        len_bits = 8 if v <= 9 else 16
+        if 4 + len_bits + 8 * len(data) <= total_data * 8:
+            version = v
+            break
+    if version is None:
+        raise ValueError("qr_text_too_long")
+    codewords = _qr_data_codewords(data, version)
+    bits = []
+    for cw in codewords:
+        for i in range(7, -1, -1):
+            bits.append((cw >> i) & 1)
+    bits += [0] * _QR_REMAINDER_BITS[version]
+    base, reserved = _qr_base_matrix(version)
+    size = len(base)
+    best = None
+    for mask in range(8):
+        modules = [row[:] for row in base]
+        i = 0
+        col = size - 1
+        upward = True
+        while col > 0:
+            if col == 6:
+                col -= 1
+            rows = range(size - 1, -1, -1) if upward else range(size)
+            for r in rows:
+                for c in (col, col - 1):
+                    if not reserved[r][c]:
+                        bit = bits[i] if i < len(bits) else 0
+                        if _qr_mask_bit(mask, r, c):
+                            bit ^= 1
+                        modules[r][c] = bit
+                        i += 1
+            col -= 2
+            upward = not upward
+        _qr_set_format(modules, mask)
+        score = _qr_penalty(modules)
+        if best is None or score < best[0]:
+            best = (score, mask, modules)
+    return version, best[1], best[2]
+
+
+def _png_grayscale(width, height, rows):
+    raw = b"".join(b"\x00" + row for row in rows)
+
+    def chunk(typ, payload):
+        return (
+            struct.pack(">I", len(payload))
+            + typ
+            + payload
+            + struct.pack(">I", binascii.crc32(typ + payload) & 0xFFFFFFFF)
+        )
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", ihdr)
+        + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
+
+
+def qr_png(text, scale=6, border=4):
+    _version, _mask, matrix = qr_encode(text)
+    n = len(matrix)
+    size = (n + border * 2) * scale
+    rows = []
+    for y in range(size):
+        my = y // scale - border
+        row = bytearray()
+        for x in range(size):
+            mx = x // scale - border
+            dark = 0 <= my < n and 0 <= mx < n and matrix[my][mx] == 1
+            row.append(0 if dark else 255)
+        rows.append(bytes(row))
+    return _png_grayscale(size, size, rows)
+
+
+def handle_qr(query):
+    text = (query or {}).get("text", "")
+    if not text:
+        return json_response(400, {"error": "text_required"})
+    if len(text.encode("utf-8")) > 213:
+        return json_response(400, {"error": "qr_text_too_long"})
+    try:
+        png = qr_png(text)
+    except ValueError:
+        return json_response(400, {"error": "qr_text_too_long"})
+    return binary_response(200, "image/png", png)
+
+
 # ---------------------------------------------------------------- 业务处理（框架无关）
 def handle_health():
     return json_response(200, {"ok": True, "service": "p4can-pay"})
 
 
-def handle_create_order(data):
+def _extract_address(data):
+    return {
+        k: str(data.get(k, "") or "").strip()
+        for k in ("recipient", "province", "city", "district", "address_detail")
+    }
+
+
+def handle_create_order(data, headers=None):
     if not isinstance(data, dict):
         return json_response(400, {"error": "invalid_json"})
     tier = str(data.get("tier", "")).strip()
@@ -324,6 +1185,19 @@ def handle_create_order(data):
     if not re.fullmatch(r"1\d{10}", phone):
         return json_response(400, {"error": "invalid_phone"})
 
+    addr = _extract_address(data)
+    missing = [k for k in ("recipient", "address_detail") if not addr[k]]
+    if missing:
+        return json_response(
+            400,
+            {
+                "error": "address_required",
+                "message": "下单需填写收货人与详细收货地址",
+                "missing": missing,
+            },
+        )
+
+    user = current_user(headers) if headers else None
     info = TIERS[tier]
     order = {
         "order_id": new_order_id(),
@@ -333,9 +1207,15 @@ def handle_create_order(data):
         "phone": phone,
         "wechat": wechat,
         "car": car,
+        "user_id": user["id"] if user else None,
         "created_at": datetime.now().isoformat(timespec="seconds"),
+        **addr,
     }
     db_insert_order(order)
+    if user:
+        book_addr = dict(addr)
+        book_addr["phone"] = phone
+        db_save_order_address(user["id"], book_addr)
     log.info("order created: %s tier=%s amount=%s", order["order_id"], tier, info["amount_cents"])
     return json_response(
         201,
@@ -345,6 +1225,7 @@ def handle_create_order(data):
             "tier_name": info["name"],
             "amount": cents_to_yuan_str(info["amount_cents"]),
             "status": "PENDING",
+            "fulfillment_status": "AWAITING_PAYMENT",
         },
     )
 
@@ -353,6 +1234,7 @@ def handle_get_order(order_id):
     order = db_get_order(order_id)
     if not order:
         return json_response(404, {"error": "order_not_found"})
+    fulfillment = order.get("fulfillment_status") or "AWAITING_PAYMENT"
     return json_response(
         200,
         {
@@ -361,11 +1243,255 @@ def handle_get_order(order_id):
             "tier_name": order["tier_name"],
             "amount": cents_to_yuan_str(order["amount_cents"]),
             "status": order["status"],
+            "fulfillment_status": fulfillment,
+            "fulfillment_label": FULFILLMENT_LABELS.get(fulfillment, ""),
             "phone": mask_phone(order["phone"]),
             "created_at": order["created_at"],
             "paid_at": order["paid_at"] or None,
         },
     )
+
+
+# ---------------------------------------------------------------- 买家账号
+def _valid_phone(phone):
+    return bool(re.fullmatch(r"1\d{10}", phone or ""))
+
+
+def handle_register(data):
+    if not isinstance(data, dict):
+        return json_response(400, {"error": "invalid_json"})
+    phone = str(data.get("phone", "")).strip()
+    password = str(data.get("password", "") or "")
+    if not _valid_phone(phone):
+        return json_response(400, {"error": "invalid_phone"})
+    if len(password) < 6:
+        return json_response(
+            400, {"error": "password_too_short", "message": "密码至少 6 位"}
+        )
+    if db_get_user_by_phone(phone):
+        return json_response(
+            409, {"error": "phone_registered", "message": "该手机号已注册，请直接登录"}
+        )
+    user_id = db_create_user(phone, hash_password(password))
+    if user_id is None:
+        return json_response(409, {"error": "phone_registered"})
+    token = db_create_session(user_id, "user", SESSION_TTL_SECONDS)
+    user = db_get_user_by_id(user_id)
+    return with_cookie(
+        json_response(201, {"user": public_user(user)}),
+        USER_COOKIE,
+        token,
+        SESSION_TTL_SECONDS,
+    )
+
+
+def handle_login(data):
+    if not isinstance(data, dict):
+        return json_response(400, {"error": "invalid_json"})
+    phone = str(data.get("phone", "")).strip()
+    password = str(data.get("password", "") or "")
+    user = db_get_user_by_phone(phone)
+    if not user or not verify_password(password, user["password_hash"]):
+        return json_response(
+            401, {"error": "invalid_credentials", "message": "手机号或密码不正确"}
+        )
+    token = db_create_session(user["id"], "user", SESSION_TTL_SECONDS)
+    return with_cookie(
+        json_response(200, {"user": public_user(user)}),
+        USER_COOKIE,
+        token,
+        SESSION_TTL_SECONDS,
+    )
+
+
+def handle_logout(headers):
+    token = parse_cookies(headers).get(USER_COOKIE, "")
+    db_delete_session(token)
+    return with_cookie(json_response(200, {"ok": True}), USER_COOKIE, "", 0)
+
+
+def handle_me(headers):
+    user = current_user(headers)
+    if not user:
+        return json_response(401, {"error": "login_required"})
+    return json_response(200, {"user": public_user(user)})
+
+
+def handle_my_orders(headers):
+    user = current_user(headers)
+    if not user:
+        return json_response(401, {"error": "login_required"})
+    orders = db_list_orders_by_user(user["id"])
+    return json_response(200, {"orders": [order_self_view(o) for o in orders]})
+
+
+def handle_my_addresses(headers):
+    user = current_user(headers)
+    if not user:
+        return json_response(401, {"error": "login_required"})
+    addrs = db_list_addresses(user["id"])
+    return json_response(200, {"addresses": [address_view(a) for a in addrs]})
+
+
+def handle_add_address(data, headers):
+    user = current_user(headers)
+    if not user:
+        return json_response(401, {"error": "login_required"})
+    if not isinstance(data, dict):
+        return json_response(400, {"error": "invalid_json"})
+    addr = _extract_address(data)
+    addr["phone"] = str(data.get("phone", "") or "").strip()
+    missing = [k for k in ("recipient", "address_detail") if not addr[k]]
+    if missing:
+        return json_response(400, {"error": "address_required", "missing": missing})
+    if addr["phone"] and not _valid_phone(addr["phone"]):
+        return json_response(400, {"error": "invalid_phone"})
+    addr_id = db_insert_address(
+        user["id"], addr, make_default=bool(data.get("is_default"))
+    )
+    addrs = db_list_addresses(user["id"])
+    saved = next((a for a in addrs if a["id"] == addr_id), None)
+    return json_response(201, {"address": address_view(saved) if saved else None})
+
+
+def handle_set_default_address(headers, address_id):
+    user = current_user(headers)
+    if not user:
+        return json_response(401, {"error": "login_required"})
+    if not db_set_default_address(user["id"], address_id):
+        return json_response(404, {"error": "address_not_found"})
+    return json_response(200, {"ok": True})
+
+
+def handle_delete_address(headers, address_id):
+    user = current_user(headers)
+    if not user:
+        return json_response(401, {"error": "login_required"})
+    if not db_delete_address(user["id"], address_id):
+        return json_response(404, {"error": "address_not_found"})
+    return json_response(200, {"ok": True})
+
+
+# ---------------------------------------------------------------- 游客订单追踪
+def handle_track(order_id, query):
+    order = db_get_order(order_id)
+    if not order:
+        return json_response(404, {"error": "order_not_found"})
+    phone = str((query or {}).get("phone", "")).strip()
+    if not phone:
+        return json_response(
+            400, {"error": "phone_required", "message": "需提供下单手机号（后四位即可）"}
+        )
+    if len(phone) == 4:
+        matched = order["phone"].endswith(phone)
+    elif _valid_phone(phone):
+        matched = order["phone"] == phone
+    else:
+        matched = False
+    if not matched:
+        return json_response(403, {"error": "phone_mismatch"})
+    fulfillment = order.get("fulfillment_status") or "AWAITING_PAYMENT"
+    return json_response(
+        200,
+        {
+            "order_id": order["order_id"],
+            "tier_name": order["tier_name"],
+            "amount": cents_to_yuan_str(order["amount_cents"]),
+            "status": order["status"],
+            "fulfillment_status": fulfillment,
+            "fulfillment_label": FULFILLMENT_LABELS.get(fulfillment, ""),
+            "courier": order.get("courier") or "",
+            "tracking_no": order.get("tracking_no") or "",
+            "province": order.get("province") or "",
+            "city": order.get("city") or "",
+            "created_at": order["created_at"],
+            "paid_at": order["paid_at"] or None,
+            "timeline": build_timeline(order),
+        },
+    )
+
+
+# ---------------------------------------------------------------- 卖家后台
+def handle_admin_login(data):
+    if not ADMIN_TOKEN:
+        return json_response(
+            503, {"error": "admin_not_configured", "message": "后台未启用（未配置 ADMIN_TOKEN）"}
+        )
+    if not isinstance(data, dict):
+        return json_response(400, {"error": "invalid_json"})
+    token = str(data.get("token", "") or "")
+    if not hmac.compare_digest(token, ADMIN_TOKEN):
+        return json_response(401, {"error": "invalid_token", "message": "口令不正确"})
+    sess = db_create_session(None, "admin", ADMIN_SESSION_TTL_SECONDS)
+    return with_cookie(
+        json_response(200, {"ok": True, "admin": True}),
+        ADMIN_COOKIE,
+        sess,
+        ADMIN_SESSION_TTL_SECONDS,
+    )
+
+
+def handle_admin_logout(headers):
+    token = parse_cookies(headers).get(ADMIN_COOKIE, "")
+    db_delete_session(token)
+    return with_cookie(json_response(200, {"ok": True}), ADMIN_COOKIE, "", 0)
+
+
+def handle_admin_session(headers):
+    if not ADMIN_TOKEN:
+        return json_response(503, {"error": "admin_not_configured"})
+    return json_response(200, {"admin": is_admin_request(headers)})
+
+
+def _admin_guard(headers):
+    """返回 None 表示放行，否则返回错误响应。"""
+    if not ADMIN_TOKEN:
+        return json_response(503, {"error": "admin_not_configured"})
+    if not is_admin_request(headers):
+        return json_response(401, {"error": "admin_required", "message": "请先登录后台"})
+    return None
+
+
+def handle_admin_orders(headers, query):
+    guard = _admin_guard(headers)
+    if guard:
+        return guard
+    status = str((query or {}).get("status", "")).strip()
+    if status and status not in FULFILLMENT_STATUSES:
+        return json_response(400, {"error": "invalid_status"})
+    orders = db_list_all_orders(status or None)
+    return json_response(200, {"orders": [order_admin_view(o) for o in orders]})
+
+
+def handle_admin_fulfillment(order_id, data, headers):
+    guard = _admin_guard(headers)
+    if guard:
+        return guard
+    if not isinstance(data, dict):
+        return json_response(400, {"error": "invalid_json"})
+    order = db_get_order(order_id)
+    if not order:
+        return json_response(404, {"error": "order_not_found"})
+    updates = {}
+    if "fulfillment_status" in data:
+        fs = str(data.get("fulfillment_status", "")).strip()
+        if fs not in FULFILLMENT_STATUSES:
+            return json_response(
+                400,
+                {
+                    "error": "invalid_fulfillment_status",
+                    "allowed": FULFILLMENT_STATUSES,
+                },
+            )
+        updates["fulfillment_status"] = fs
+    for key in ("courier", "tracking_no"):
+        if key in data:
+            updates[key] = str(data.get(key, "") or "").strip()
+    if not updates:
+        return json_response(400, {"error": "nothing_to_update"})
+    db_update_fulfillment(order_id, updates)
+    log.info("admin fulfillment update: %s -> %s", order_id, updates)
+    return json_response(200, {"order": order_admin_view(db_get_order(order_id))})
 
 
 def handle_alipay_pay(data, user_agent):
@@ -788,7 +1914,7 @@ def handle_wechat_notify(raw_body, headers):
 
 
 # ---------------------------------------------------------------- 路由分发（框架无关）
-def dispatch(
+def _dispatch_impl(
     method,
     path,
     json_body=None,
@@ -797,14 +1923,15 @@ def dispatch(
     headers=None,
     raw_body=b"",
     remote_addr="",
+    query=None,
 ):
-    """返回 (status, content_type, body_bytes)。headers 统一转小写 key。"""
     headers = {str(k).lower(): v for k, v in (headers or {}).items()}
+    query = query or {}
     client_ip = headers.get("x-forwarded-for", "").split(",")[0].strip() or remote_addr
     if method == "GET" and path == "/api/health":
         return handle_health()
     if method == "POST" and path == "/api/order":
-        return handle_create_order(json_body)
+        return handle_create_order(json_body, headers)
     if method == "POST" and path == "/api/pay/alipay":
         return handle_alipay_pay(json_body, user_agent)
     if method == "POST" and path == "/api/pay/notify/alipay":
@@ -816,7 +1943,75 @@ def dispatch(
     m = re.fullmatch(r"/api/order/([A-Za-z0-9_-]+)", path or "")
     if method == "GET" and m:
         return handle_get_order(m.group(1))
+    # ---- 商城：买家账号 ----
+    if method == "POST" and path == "/api/register":
+        return handle_register(json_body)
+    if method == "POST" and path == "/api/login":
+        return handle_login(json_body)
+    if method == "POST" and path == "/api/logout":
+        return handle_logout(headers)
+    if method == "GET" and path == "/api/me":
+        return handle_me(headers)
+    if method == "GET" and path == "/api/my/orders":
+        return handle_my_orders(headers)
+    if method == "GET" and path == "/api/my/addresses":
+        return handle_my_addresses(headers)
+    if method == "POST" and path == "/api/my/addresses":
+        return handle_add_address(json_body, headers)
+    m = re.fullmatch(r"/api/my/addresses/(\d+)/default", path or "")
+    if method == "POST" and m:
+        return handle_set_default_address(headers, int(m.group(1)))
+    m = re.fullmatch(r"/api/my/addresses/(\d+)", path or "")
+    if method == "DELETE" and m:
+        return handle_delete_address(headers, int(m.group(1)))
+    # ---- 商城：游客追踪 ----
+    m = re.fullmatch(r"/api/track/([A-Za-z0-9_-]+)", path or "")
+    if method == "GET" and m:
+        return handle_track(m.group(1), query)
+    # ---- 商城：卖家后台 ----
+    if method == "POST" and path == "/api/admin/login":
+        return handle_admin_login(json_body)
+    if method == "POST" and path == "/api/admin/logout":
+        return handle_admin_logout(headers)
+    if method == "GET" and path == "/api/admin/session":
+        return handle_admin_session(headers)
+    if method == "GET" and path == "/api/admin/orders":
+        return handle_admin_orders(headers, query)
+    m = re.fullmatch(r"/api/admin/order/([A-Za-z0-9_-]+)/fulfillment", path or "")
+    if method == "POST" and m:
+        return handle_admin_fulfillment(m.group(1), json_body, headers)
+    # ---- 离线二维码 ----
+    if method == "GET" and path == "/api/qr":
+        return handle_qr(query)
     return json_response(404, {"error": "not_found", "path": path})
+
+
+def dispatch(
+    method,
+    path,
+    json_body=None,
+    form=None,
+    user_agent="",
+    headers=None,
+    raw_body=b"",
+    remote_addr="",
+    query=None,
+):
+    """返回 (status, content_type, body_bytes, extra_headers)。headers 统一转小写 key。"""
+    result = _dispatch_impl(
+        method,
+        path,
+        json_body=json_body,
+        form=form,
+        user_agent=user_agent,
+        headers=headers,
+        raw_body=raw_body,
+        remote_addr=remote_addr,
+        query=query,
+    )
+    if len(result) == 3:
+        return result[0], result[1], result[2], {}
+    return result
 
 
 # ---------------------------------------------------------------- Flask 适配（优先）
@@ -831,7 +2026,7 @@ def run_flask():
         if request.is_json:
             json_body = request.get_json(silent=True)
         form = request.form.to_dict() if request.form else None
-        status, ctype, body = dispatch(
+        status, ctype, body, extra = dispatch(
             request.method,
             request.path,
             json_body=json_body,
@@ -840,8 +2035,12 @@ def run_flask():
             headers=dict(request.headers),
             raw_body=raw_body,
             remote_addr=request.remote_addr or "",
+            query=request.args.to_dict(),
         )
-        return app.response_class(body, status=status, content_type=ctype)
+        resp = app.response_class(body, status=status, content_type=ctype)
+        for k, v in (extra or {}).items():
+            resp.headers[k] = v
+        return resp
 
     app.add_url_rule("/api/health", view_func=_handle, methods=["GET"])
     app.add_url_rule("/api/order", view_func=_handle, methods=["POST"])
@@ -850,6 +2049,31 @@ def run_flask():
     app.add_url_rule("/api/pay/notify/alipay", view_func=_handle, methods=["POST"])
     app.add_url_rule("/api/pay/wechat", view_func=_handle, methods=["POST"])
     app.add_url_rule("/api/pay/notify/wechat", view_func=_handle, methods=["POST"])
+    app.add_url_rule("/api/register", view_func=_handle, methods=["POST"])
+    app.add_url_rule("/api/login", view_func=_handle, methods=["POST"])
+    app.add_url_rule("/api/logout", view_func=_handle, methods=["POST"])
+    app.add_url_rule("/api/me", view_func=_handle, methods=["GET"])
+    app.add_url_rule("/api/my/orders", view_func=_handle, methods=["GET"])
+    app.add_url_rule(
+        "/api/my/addresses", view_func=_handle, methods=["GET", "POST"]
+    )
+    app.add_url_rule(
+        "/api/my/addresses/<addr_id>/default", view_func=_handle, methods=["POST"]
+    )
+    app.add_url_rule(
+        "/api/my/addresses/<addr_id>", view_func=_handle, methods=["DELETE"]
+    )
+    app.add_url_rule("/api/track/<order_id>", view_func=_handle, methods=["GET"])
+    app.add_url_rule("/api/admin/login", view_func=_handle, methods=["POST"])
+    app.add_url_rule("/api/admin/logout", view_func=_handle, methods=["POST"])
+    app.add_url_rule("/api/admin/session", view_func=_handle, methods=["GET"])
+    app.add_url_rule("/api/admin/orders", view_func=_handle, methods=["GET"])
+    app.add_url_rule(
+        "/api/admin/order/<order_id>/fulfillment",
+        view_func=_handle,
+        methods=["POST"],
+    )
+    app.add_url_rule("/api/qr", view_func=_handle, methods=["GET"])
 
     log.info("starting Flask mode on %s:%s (db=%s)", HOST, PORT, DB_PATH)
     app.run(host=HOST, port=PORT, threaded=True)
@@ -866,10 +2090,12 @@ def run_stdlib():
         def log_message(self, fmt, *args):  # 走 logging，别刷 stderr
             log.info("%s - %s", self.address_string(), fmt % args)
 
-        def _respond(self, status, ctype, body):
+        def _respond(self, status, ctype, body, extra=None):
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(body)
@@ -892,7 +2118,8 @@ def run_stdlib():
                 elif "application/x-www-form-urlencoded" in ctype:
                     qs = parse_qs(raw.decode("utf-8"), keep_blank_values=True)
                     form = {k: v[0] for k, v in qs.items()}
-            status, resp_ctype, body = dispatch(
+            query = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+            status, resp_ctype, body, extra = dispatch(
                 self.command,
                 parsed.path,
                 json_body=json_body,
@@ -901,11 +2128,13 @@ def run_stdlib():
                 headers=dict(self.headers.items()),
                 raw_body=raw,
                 remote_addr=self.client_address[0],
+                query=query,
             )
-            self._respond(status, resp_ctype, body)
+            self._respond(status, resp_ctype, body, extra)
 
         do_GET = _handle
         do_POST = _handle
+        do_DELETE = _handle
 
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     log.info("starting stdlib http.server mode on %s:%s (db=%s)", HOST, PORT, DB_PATH)

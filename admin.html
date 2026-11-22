@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>卖家后台 · 阿童木</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root{
+    --ink:#171a20; --ink2:#393c41; --dim:#5c5e62; --dim2:#8a8d93;
+    --bg:#ffffff; --alt:#f4f4f4; --line:#e8e8e8; --line2:#dcdcde;
+    --redtx:#a4261f; --green:#0a7d3b; --amber:#9a7b1c;
+    --mono:"SF Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .nav{position:fixed; top:0; left:0; right:0; z-index:50; display:flex; align-items:center; gap:2px;
+    padding:0 28px; height:56px; background:rgba(255,255,255,.82); backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line)}
+  .nav .logo{font-weight:600; letter-spacing:.32em; font-size:15px; padding:8px 12px 8px 2px}
+  .nav a.nl{color:var(--ink2); text-decoration:none; font-size:14px; font-weight:500; padding:7px 13px; border-radius:4px}
+  .nav .sp{flex:1}
+  @media (max-width:720px){ .nav{padding:0 14px} }
+  .wrap{max-width:1060px; margin:0 auto; padding:84px 20px 70px}
+  h1{font-size:24px; margin:0 0 6px}
+  .sub{color:var(--dim); font-size:14px; margin:0 0 22px}
+  .card{border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:18px}
+  .f{margin-bottom:12px}
+  .f label{display:block; font-size:13px; color:var(--dim); margin-bottom:5px}
+  .in{width:100%; border:1px solid var(--line2); border-radius:8px; padding:10px 12px;
+    font-size:15px; font-family:inherit; color:var(--ink); background:#fff}
+  .in:focus{outline:none; border-color:var(--ink)}
+  select.in{appearance:auto}
+  .btn{border:none; background:var(--ink); color:#fff; font-size:14px; font-weight:600;
+    padding:10px 20px; border-radius:10px; cursor:pointer; font-family:inherit}
+  .btn:hover{opacity:.86} .btn:disabled{opacity:.5}
+  .btn.ghost{background:#fff; color:var(--ink); border:1px solid var(--line2)}
+  .btn.small{padding:6px 13px; font-size:13px; border-radius:8px}
+  .err{color:var(--redtx); font-size:13px; min-height:18px; margin:8px 0 0}
+  .ok{color:var(--green); font-size:13px; margin:8px 0 0}
+  .note{color:var(--dim); font-size:13px}
+  .toolbar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:14px}
+  .toolbar select{border:1px solid var(--line2); border-radius:8px; padding:9px 10px; font-size:14px; font-family:inherit}
+  .toolbar .sp{flex:1}
+  .order{border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px}
+  .order .top{display:flex; flex-wrap:wrap; gap:6px 14px; align-items:baseline}
+  .order .oid{font-family:var(--mono); font-size:13px; color:var(--dim)}
+  .order .tn{font-weight:600}
+  .order .amt{font-weight:700}
+  .badge{display:inline-block; font-size:12px; padding:2px 9px; border-radius:99px;
+    background:var(--alt); color:var(--ink2); border:1px solid var(--line2)}
+  .badge.paid{color:var(--green); border-color:var(--green)}
+  .badge.pend{color:var(--amber); border-color:var(--amber)}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:6px 18px;
+    font-size:13px; color:var(--ink2); margin-top:10px}
+  .grid b{color:var(--dim); font-weight:500; margin-right:6px}
+  .addrbox{background:var(--alt); border-radius:8px; padding:10px 12px; font-size:14px; margin-top:10px;
+    display:flex; gap:10px; align-items:flex-start}
+  .addrbox .a{flex:1; word-break:break-all}
+  .ctrl{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; align-items:center}
+  .ctrl select, .ctrl input{border:1px solid var(--line2); border-radius:8px; padding:8px 10px;
+    font-size:13px; font-family:inherit}
+  .ctrl input{width:170px}
+  .ctrl .msg{font-size:13px; color:var(--green)}
+  .empty{color:var(--dim); font-size:14px}
+</style>
+</head>
+<body>
+  <nav class="nav">
+    <span class="logo">阿童木</span>
+    <a class="nl" href="index.html">站点首页</a>
+    <span class="sp"></span>
+    <span class="nl" style="color:var(--dim)">卖家后台</span>
+  </nav>
+
+  <div class="wrap">
+    <h1>卖家后台</h1>
+    <p class="sub">订单、收货地址与发货管理。完整地址与电话只在这个后台可见，公开查单页一律脱敏。</p>
+
+    <div class="card" id="loginCard">
+      <div class="f"><label>后台口令（ADMIN_TOKEN）</label>
+        <input class="in" id="tokenInput" type="password" autocomplete="current-password" placeholder="输入口令"></div>
+      <button type="button" class="btn" id="loginBtn">登录后台</button>
+      <p class="err" id="loginErr"></p>
+    </div>
+
+    <div id="panel" style="display:none">
+      <div class="toolbar">
+        <select id="statusFilter">
+          <option value="">全部状态</option>
+          <option value="AWAITING_PAYMENT">待付款</option>
+          <option value="PAID">付款成功（待发货）</option>
+          <option value="PREPARING">备货中</option>
+          <option value="SHIPPED">已发货</option>
+          <option value="IN_TRANSIT">运输中</option>
+          <option value="DELIVERED">已签收</option>
+          <option value="COMPLETED">已完成</option>
+          <option value="AFTER_SALE">售后中</option>
+        </select>
+        <button type="button" class="btn ghost small" id="refreshBtn">刷新</button>
+        <span class="note" id="countText"></span>
+        <span class="sp"></span>
+        <button type="button" class="btn ghost small" id="logoutBtn">退出后台</button>
+      </div>
+      <div id="ordersList"><p class="empty">加载中…</p></div>
+    </div>
+  </div>
+
+<script>
+  function el(id){ return document.getElementById(id); }
+  function api(method, path, body){
+    var opt = {method: method, headers: {'Content-Type': 'application/json'}};
+    if (body) opt.body = JSON.stringify(body);
+    return fetch(path, opt).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(j){ return {status: r.status, j: j}; });
+    });
+  }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+    });
+  }
+  var FS = [
+    ['AWAITING_PAYMENT', '待付款'], ['PAID', '付款成功（待发货）'], ['PREPARING', '备货中'],
+    ['SHIPPED', '已发货'], ['IN_TRANSIT', '运输中'], ['DELIVERED', '已签收'],
+    ['COMPLETED', '已完成'], ['AFTER_SALE', '售后中']
+  ];
+  function fullAddress(o){
+    return [o.recipient, o.phone, o.province, o.city, o.district, o.address_detail]
+      .filter(Boolean).join(' ');
+  }
+  function orderHtml(o){
+    var payBadge = o.status === 'PAID' ? '<span class="badge paid">已付款</span>'
+      : '<span class="badge pend">未付款</span>';
+    var opts = FS.map(function(p){
+      return '<option value="' + p[0] + '"' + (o.fulfillment_status === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+    }).join('');
+    return '<div class="order" data-oid="' + esc(o.order_id) + '">' +
+      '<div class="top"><span class="tn">' + esc(o.tier_name) + '</span>' +
+      '<span class="amt">¥' + esc(o.amount) + '</span>' + payBadge +
+      '<span class="badge">' + esc(o.fulfillment_label || '') + '</span>' +
+      '<span class="oid">' + esc(o.order_id) + '</span>' +
+      '<span class="oid">' + esc((o.created_at || '').replace('T', ' ')) + '</span></div>' +
+      '<div class="grid">' +
+      '<span><b>收货人</b>' + esc(o.recipient || '—') + '</span>' +
+      '<span><b>电话</b>' + esc(o.phone || '—') + '</span>' +
+      '<span><b>微信号</b>' + esc(o.wechat || '—') + '</span>' +
+      '<span><b>车型</b>' + esc(o.car || '—') + '</span>' +
+      '<span><b>付款时间</b>' + esc((o.paid_at || '—').replace('T', ' ')) + '</span>' +
+      '<span><b>状态更新</b>' + esc((o.status_updated_at || '—').replace('T', ' ')) + '</span>' +
+      '</div>' +
+      '<div class="addrbox"><span class="a">' + esc(fullAddress(o) || '（无地址，老订单）') + '</span>' +
+      '<button type="button" class="btn ghost small" data-copy="' + esc(o.order_id) + '">复制地址</button></div>' +
+      '<div class="ctrl">' +
+      '<select data-fs="' + esc(o.order_id) + '">' + opts + '</select>' +
+      '<input data-courier="' + esc(o.order_id) + '" placeholder="快递公司" value="' + esc(o.courier || '') + '">' +
+      '<input data-track="' + esc(o.order_id) + '" placeholder="快递单号" value="' + esc(o.tracking_no || '') + '">' +
+      '<button type="button" class="btn small" data-save="' + esc(o.order_id) + '">保存</button>' +
+      '<span class="msg" data-msg="' + esc(o.order_id) + '"></span>' +
+      '</div></div>';
+  }
+  var ordersCache = {};
+  function loadOrders(){
+    var st = el('statusFilter').value;
+    api('GET', '/api/admin/orders' + (st ? '?status=' + encodeURIComponent(st) : '')).then(function(res){
+      if (res.status === 401) { showLogin('会话已过期，请重新登录。'); return; }
+      if (res.status === 503) { showLogin('后台未启用：服务器未配置 ADMIN_TOKEN。'); return; }
+      var list = (res.j && res.j.orders) || [];
+      ordersCache = {};
+      list.forEach(function(o){ ordersCache[o.order_id] = o; });
+      el('countText').textContent = '共 ' + list.length + ' 单';
+      el('ordersList').innerHTML = list.length ? list.map(orderHtml).join('') : '<p class="empty">暂无订单。</p>';
+      bindRows();
+    });
+  }
+  function bindRows(){
+    el('ordersList').querySelectorAll('[data-copy]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var o = ordersCache[b.getAttribute('data-copy')];
+        var text = fullAddress(o);
+        function done(){ b.textContent = '已复制 ✓'; setTimeout(function(){ b.textContent = '复制地址'; }, 1500); }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done).catch(function(){ fallbackCopy(text); done(); });
+        } else { fallbackCopy(text); done(); }
+      });
+    });
+    el('ordersList').querySelectorAll('[data-save]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var oid = b.getAttribute('data-save');
+        var payload = {
+          fulfillment_status: document.querySelector('[data-fs="' + oid + '"]').value,
+          courier: document.querySelector('[data-courier="' + oid + '"]').value.trim(),
+          tracking_no: document.querySelector('[data-track="' + oid + '"]').value.trim()
+        };
+        var msg = document.querySelector('[data-msg="' + oid + '"]');
+        b.disabled = true;
+        api('POST', '/api/admin/order/' + encodeURIComponent(oid) + '/fulfillment', payload)
+          .then(function(res){
+            b.disabled = false;
+            if (res.status === 200) { msg.textContent = '已保存 ✓'; ordersCache[oid] = res.j.order; }
+            else { msg.textContent = '保存失败'; msg.style.color = 'var(--redtx)'; }
+          })
+          .catch(function(){ b.disabled = false; msg.textContent = '网络异常'; });
+      });
+    });
+  }
+  function fallbackCopy(text){
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+  function showLogin(msg){
+    el('panel').style.display = 'none';
+    el('loginCard').style.display = '';
+    if (msg) el('loginErr').textContent = msg;
+  }
+  function showPanel(){
+    el('loginCard').style.display = 'none';
+    el('panel').style.display = '';
+    loadOrders();
+  }
+  el('loginBtn').addEventListener('click', function(){
+    var token = el('tokenInput').value;
+    el('loginErr').textContent = '';
+    if (!token) { el('loginErr').textContent = '请输入口令。'; return; }
+    var btn = el('loginBtn'); btn.disabled = true;
+    api('POST', '/api/admin/login', {token: token}).then(function(res){
+      btn.disabled = false;
+      if (res.status === 200) { el('tokenInput').value = ''; showPanel(); }
+      else if (res.status === 503) { el('loginErr').textContent = '后台未启用：服务器未配置 ADMIN_TOKEN。'; }
+      else { el('loginErr').textContent = '口令不正确。'; }
+    }).catch(function(){ btn.disabled = false; el('loginErr').textContent = '网络异常，请再试一次。'; });
+  });
+  el('tokenInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') el('loginBtn').click(); });
+  el('logoutBtn').addEventListener('click', function(){
+    api('POST', '/api/admin/logout', {}).then(function(){ showLogin(''); });
+  });
+  el('refreshBtn').addEventListener('click', loadOrders);
+  el('statusFilter').addEventListener('change', loadOrders);
+
+  api('GET', '/api/admin/session').then(function(res){
+    if (res.status === 200 && res.j.admin) showPanel();
+    else if (res.status === 503) showLogin('后台未启用：服务器未配置 ADMIN_TOKEN。');
+  }).catch(function(){});
+</script>
+</body>
+</html>
