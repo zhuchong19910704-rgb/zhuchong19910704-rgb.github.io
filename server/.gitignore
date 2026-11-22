@@ -1,0 +1,7 @@
+# 运行时产物与密钥，禁止进仓库
+orders.db
+orders.db-*
+*.pem
+*.key
+pay.env
+__pycache__/

@@ -1,0 +1,16 @@
+# 888ai.me 支付 API 反代片段示例
+# 把下面 location 块加进现有的 888ai.me 的 server { ... }（443）块内，
+# 然后 nginx -t && systemctl reload nginx。
+# 后端进程本身监听 127.0.0.1:9000（见 pay.service），不直接对外。
+
+location /api/ {
+    proxy_pass http://127.0.0.1:9000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # User-Agent 必须透传：后端靠它区分电脑 page.pay / 手机 wap.pay
+    proxy_set_header User-Agent $http_user_agent;
+    proxy_read_timeout 15s;
+}

@@ -1,0 +1,23 @@
+# 888ai.me 支付后端 systemd unit 示例
+# 安装：cp pay.service /etc/systemd/system/pay.service
+#       systemctl daemon-reload && systemctl enable --now pay
+# 商户参数写在 /etc/p4can/pay.env（见 README 的环境变量清单），权限 600。
+
+[Unit]
+Description=888ai.me Alipay payment backend
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/888ai/server
+ExecStart=/usr/bin/python3 /var/www/888ai/server/app.py
+EnvironmentFile=/etc/p4can/pay.env
+Restart=on-failure
+RestartSec=3
+# 订单库放仓库外，避免 git pull 干扰；目录需预先建好并 chown www-data
+# Environment=ORDERS_DB_PATH=/var/lib/p4can/orders.db
+
+[Install]
+WantedBy=multi-user.target

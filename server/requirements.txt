@@ -1,0 +1,11 @@
+# 888ai.me 支付后端依赖说明
+#
+# 真正硬性依赖（支付宝 RSA2 签名/验签）：
+cryptography>=41.0
+#
+# 可选：装了 Flask 就用 Flask 模式；不装则自动退回 Python 标准库
+# http.server 模式，功能一致。裸机部署可以只装 cryptography 一项。
+flask>=3.0
+#
+# 安装：pip install -r requirements.txt
+# 只装硬性依赖：pip install cryptography
