@@ -633,6 +633,14 @@
     sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('s' + Date.now() + Math.random().toString(36).slice(2, 10));
     try { localStorage.setItem('p4chat_sid', sid); } catch (e) {}
   }
+  var relayFailed = false;
+  function postFail(text, attempt){
+    if (attempt < 1) { setTimeout(function(){ postChat(text, attempt + 1); }, 4000); return; }
+    if (!relayFailed) {
+      relayFailed = true;
+      addMsg('（这条好像没发出去，网络不太稳。你先在下方表单留个微信号或手机号，店主会直接联系你。）', 'bot');
+    }
+  }
   function relaySend(text){
     postChat(text, 0);
   }
@@ -650,9 +658,9 @@
         '页面': location.href
       })
     }).then(function(r){
-      if (!r.ok && attempt < 1) setTimeout(function(){ postChat(text, attempt + 1); }, 4000);
+      if (!r.ok) postFail(text, attempt);
     }).catch(function(){
-      if (attempt < 1) setTimeout(function(){ postChat(text, attempt + 1); }, 4000);
+      postFail(text, attempt);
     });
   }
   var seenTs = 0;
