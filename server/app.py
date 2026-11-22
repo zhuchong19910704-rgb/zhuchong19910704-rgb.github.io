@@ -98,6 +98,7 @@ def wechat_config():
     """读取微信商户配置；返回 (cfg, missing_list)。"""
     cfg = {
         "mchid": os.environ.get("WECHAT_MCHID", "").strip(),
+        "appid": os.environ.get("WECHAT_APPID", "").strip(),
         "cert_serial": os.environ.get("WECHAT_CERT_SERIAL", "").strip(),
         "private_key_path": os.environ.get("WECHAT_PRIVATE_KEY_PATH", "").strip(),
         "api_v3_key": os.environ.get("WECHAT_API_V3_KEY", "").strip(),
@@ -109,6 +110,7 @@ def wechat_config():
         name
         for name, key in (
             ("WECHAT_MCHID", "mchid"),
+            ("WECHAT_APPID", "appid"),
             ("WECHAT_CERT_SERIAL", "cert_serial"),
             ("WECHAT_PRIVATE_KEY_PATH", "private_key_path"),
             ("WECHAT_API_V3_KEY", "api_v3_key"),
@@ -600,6 +602,7 @@ def handle_wechat_pay(data, user_agent, client_ip):
     is_mobile = any(k in ua for k in ("mobile", "android", "iphone", "ipad"))
     payload = {
         "mchid": cfg["mchid"],
+        "appid": cfg["appid"],
         "description": SUBJECT_PREFIX + order["tier_name"],
         "out_trade_no": order["order_id"],
         "notify_url": cfg["notify_url"],

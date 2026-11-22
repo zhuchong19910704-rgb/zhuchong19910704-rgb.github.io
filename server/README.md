@@ -82,12 +82,15 @@ python3 app.py                    # 默认监听 127.0.0.1:9000
 | `ALIPAY_RETURN_URL` | 否 | 支付后同步跳转，如 `https://888ai.me/` |
 | `ALIPAY_GATEWAY` | 否 | 默认 `https://openapi.alipay.com/gateway.do`（沙箱联调时换沙箱网关） |
 | `WECHAT_MCHID` | 微信必填 | 微信支付商户号 |
+| `WECHAT_APPID` | 微信必填 | 与商户号绑定的 AppID（Native/H5 下单必填，缺失会被微信以 PARAM_ERROR 拒绝） |
 | `WECHAT_CERT_SERIAL` | 微信必填 | 商户 API 证书序列号 |
 | `WECHAT_PRIVATE_KEY_PATH` | 微信必填 | 商户 API 证书私钥 PEM 路径（`apiclient_key.pem`，只放服务器，禁止进 git） |
 | `WECHAT_API_V3_KEY` | 微信必填 | APIv3 密钥（32 位，只写 pay.env，禁止进 git/日志） |
 | `WECHAT_PUB_KEY_ID` | 微信必填 | 微信支付公钥 ID（`PUB_KEY_ID_...`，商户平台 API 安全页） |
 | `WECHAT_PUB_KEY_PATH` | 微信必填 | 微信支付公钥 PEM 路径（商户平台下载的 `pub_key.pem`） |
 | `WECHAT_NOTIFY_URL` | 微信必填 | 异步回调地址，如 `https://888ai.me/api/pay/notify/wechat` |
+> 注：`WECHAT_APPID` 须为已与该商户号绑定的公众号 / 小程序 / 移动应用 AppID，在微信商户平台「AppID 账号管理」里完成绑定，未绑定的 AppID 下单会被拒绝。
+
 | `ORDERS_DB_PATH` | 否 | 默认 `server/orders.db`，生产建议 `/var/lib/p4can/orders.db` |
 | `PAY_HOST` / `PAY_PORT` | 否 | 默认 `127.0.0.1` / `9000`，不要改成对外监听 |
 
@@ -158,3 +161,14 @@ curl -s -X POST http://127.0.0.1:19090/api/pay/alipay -H 'Content-Type: applicat
 - 支付宝回归（假密钥全链路复测）：建单 201、page/wap 按 UA 切换、pay_url 签名独立验签通过、模拟回调置 PAID、重复回调幂等、金额篡改被拒，8/8 通过 ✅
 
 测试用订单库、假密钥与测试公钥均在 /tmp；APIv3 密钥仅经环境变量注入测试进程，未写入任何文件。
+
+**第四轮：微信下单补 appid 修复（2026-11-22，本地离线自测，未调用微信生产接口）**
+
+背景：生产真链路验证时微信以 `PARAM_ERROR` 拒绝下单——APIv3 的 Native/H5 下单请求体必填与商户号绑定的 `appid`，原代码未带该字段。本轮修复：`wechat_config()` 新增第 8 项配置 `WECHAT_APPID`（纳入缺失检查），Native 与 H5 下单请求体均加上 `"appid"`（与 `mchid` 并列）。
+
+- 无参数模式（Phase A，7/7）：建单 201、查单脱敏 ✅；`POST /api/pay/wechat` → 503 `wechat_config_missing`，缺失清单共 8 项且含 `WECHAT_APPID` ✅；支付宝 503（4 项缺失）与伪造回调 `failure` 不受影响 ✅
+- 全配置拦截验证（Phase B，23/23）：拦截 `wechat_api_post` 捕获请求体（不真调微信）——Native 路径 `/v3/pay/transactions/native`、H5 路径 `/v3/pay/transactions/h5`，两条请求体均断言 `appid` 存在且等于注入的测试 AppID、`mchid` 并列正确、金额与订单号正确、H5 的 `scene_info.payer_client_ip` 正确 ✅
+- 微信回调回归：加密+签名通知 → SUCCESS 置 PAID、重复通知幂等、金额篡改 400、冒充签名 401、公钥 ID 不符 401 ✅
+- 支付宝回归：page/wap 按 UA 切换、pay_url 签名独立验签通过、模拟回调置 PAID、重复回调幂等、金额篡改被拒 ✅
+
+测试用订单库、假密钥与测试 AppID 均在 /tmp / 进程内存，未进仓库；未调用微信生产接口。
