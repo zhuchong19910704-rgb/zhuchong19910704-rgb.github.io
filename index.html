@@ -234,6 +234,11 @@
     font-size:21px; cursor:pointer; line-height:1}
   .kf-body{padding:6px 19px 16px}
   .kf-sec{font-family:var(--mono); font-size:11px; letter-spacing:.18em; color:var(--dim2); margin:15px 0 8px}
+  .kf-wx{margin:16px 0 4px; padding:14px 12px 12px; text-align:center; background:var(--alt);
+    border:1px solid var(--line); border-radius:12px}
+  .kf-wx h4{margin:0 0 10px; font-size:15px; font-weight:600}
+  .kf-wx img{width:200px; max-width:72%; height:auto; border-radius:8px; display:block; margin:0 auto}
+  .kf-wx p{margin:9px 0 0; font-size:12.5px; color:var(--dim); line-height:1.6}
   details.kf-q{border:1px solid var(--line); border-radius:8px; margin:8px 0; background:#fff}
   details.kf-q summary{cursor:pointer; padding:11px 13px; font-size:14px; font-weight:600; list-style:none}
   details.kf-q summary::-webkit-details-marker{display:none}
@@ -710,6 +715,12 @@
       <button type="button" id="chatSend">发送</button>
     </div>
 
+    <div class="kf-wx">
+      <h4>加店主微信，一对一指导</h4>
+      <img src="wechat-qr.jpg" alt="店主微信二维码">
+      <p>扫码加微信，领《首刷图文教程》＋装车一对一指导</p>
+    </div>
+
     <p class="kf-sec">留言 / 下单（智能客服答不了的，留号码人工联系）</p>
     <form class="kf-form" id="kfForm">
       <label>你的称呼（选填）</label>
@@ -787,7 +798,7 @@
     if (myMsgCount === 2 && !leadShown) {
       leadShown = true;
       try { localStorage.setItem('p4chat_lead', '1'); } catch (e) {}
-      addMsg('想直接跟店主一对一聊？在下方表单留个微信号或手机号，店主加你——确认适配、下单、刷机指导都能直接对接，不用在这儿等。', 'bot');
+      addMsg('想直接跟店主一对一聊？往下翻一点，扫面板里的二维码就能加店主微信——确认适配、下单、刷机指导都能直接对接，不用在这儿等。', 'bot');
     }
   }
   function askChat(q){
