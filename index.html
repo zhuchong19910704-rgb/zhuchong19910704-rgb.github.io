@@ -525,7 +525,7 @@
       <div class="tier"><div class="tn">FSD 版</div><div class="tp">¥699</div><p class="td">车已购 FSD：同老款 FSD 版功能集。</p><button class="buy" data-tier="new_fsd" data-plan="新款 FSD版 ¥699">立即购买</button></div>
     </div>
 
-    <p class="pnote">点「立即购买」即可在线下单：填收货地址后用微信扫码或支付宝付款，发货进度与快递单号在「我的订单」里随时可查。不确定适配先问右下角客服。<br>所有档位均含 <span class="gold">永久免费 OTA 升级</span> · 固件免费下载自刷 · 后续更新免费<br>另有<strong>一体板方案 T2CAN</strong>（见下方固件区）：套件实测中、即将上架，可先留言登记。</p>
+    <p class="pnote">点「立即购买」即可在线下单：填收货地址后用微信扫码付款，发货进度与快递单号在「我的订单」里随时可查。不确定适配先问右下角客服。<br>所有档位均含 <span class="gold">永久免费 OTA 升级</span> · 固件免费下载自刷 · 后续更新免费<br>另有<strong>一体板方案 T2CAN</strong>（见下方固件区）：套件实测中、即将上架，可先留言登记。</p>
   </section>
 
   <!-- DOWNLOAD -->
@@ -666,9 +666,6 @@
         <img id="ckWxQr" alt="微信支付二维码">
         <p class="ck-note" id="ckWxTip">用微信扫一扫付款。付款后本页会自动确认，一般几秒内。</p>
       </div>
-      <div class="ck-gap"></div>
-      <button type="button" class="ck-btn ali" id="ckPayAli">支付宝付款</button>
-      <p class="ck-note" id="ckAliArea" style="display:none">已打开支付宝付款页；如果没弹出，<a id="ckAliLink" href="#" target="_blank" rel="noopener">点这里跳转</a>。付款后回到本页稍等，系统会自动确认。</p>
       <p class="ck-err" id="ckPayErr"></p>
       <p class="ck-note" id="ckPollNote">正在等待付款确认…（也可以付完款后到「我的订单」里看进度）</p>
     </div>
@@ -889,7 +886,7 @@
   });
 </script>
 <script>
-  // ---- 在线结算：注册/登录 → 地址建单 → 微信/支付宝支付 → 轮询确认 ----
+  // ---- 在线结算：注册/登录 → 地址建单 → 微信支付 → 轮询确认 ----
   var CK_TIERS = {
     legacy_basic: {name: '老款 基础版', price: '¥399'},
     legacy_eap:   {name: '老款 EAP 版', price: '¥499'},
@@ -1026,7 +1023,6 @@
       ckEl('ckPayOrder').textContent = '订单号 ' + ck.orderId + '（请在 2 小时内完成支付）';
       ckEl('ckPayErr').textContent = '';
       ckEl('ckWxArea').style.display = 'none';
-      ckEl('ckAliArea').style.display = 'none';
       ckShowStep('pay');
       ckStartPoll();
     }).catch(function(){
@@ -1044,7 +1040,7 @@
     if (ckIsMobile) wxBody.pay_type = 'native';
     ckApi('POST', '/api/pay/wechat', wxBody).then(function(res){
       if (res.status !== 200) {
-        ckEl('ckPayErr').textContent = (res.j && (res.j.message || res.j.error)) || '微信支付暂时不可用，请用支付宝或联系客服。';
+        ckEl('ckPayErr').textContent = (res.j && (res.j.message || res.j.error)) || '微信支付暂时不可用，请联系客服。';
         return;
       }
       if (res.j.pay_type === 'native' && res.j.code_url) {
@@ -1056,19 +1052,6 @@
       }
     }).catch(function(){ ckEl('ckPayErr').textContent = '网络异常，请再试一次。'; });
   });
-  ckEl('ckPayAli').addEventListener('click', function(){
-    ckEl('ckPayErr').textContent = '';
-    ckApi('POST', '/api/pay/alipay', {order_id: ck.orderId}).then(function(res){
-      if (res.status !== 200 || !res.j.pay_url) {
-        ckEl('ckPayErr').textContent = (res.j && (res.j.message || res.j.error)) || '支付宝暂时不可用，请稍后再试或联系客服。';
-        return;
-      }
-      ckEl('ckAliLink').href = res.j.pay_url;
-      ckEl('ckAliArea').style.display = '';
-      window.open(res.j.pay_url, '_blank');
-    }).catch(function(){ ckEl('ckPayErr').textContent = '网络异常，请再试一次。'; });
-  });
-
   // ---- 轮询与成功 ----
   function ckRenderTimeline(nodes){
     var html = '';
