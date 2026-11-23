@@ -22,6 +22,7 @@ PORT_A, PORT_B = 19097, 19098
 ADMIN_TOKEN = "test-admin-token-xyz"
 SID1 = "test-session-0001"
 SID2 = "test-session-0002"
+SID3 = "test-session-0003"
 
 results = []
 
@@ -159,6 +160,39 @@ def main():
                          A + "/api/chat/poll?session_id=%s&after_id=%d" % (SID1, auto_id))
         check("poll after miss", s == 200 and [m["id"] for m in j["messages"]] == [miss_id]
               and j["messages"][0]["sender"] == "customer")
+
+        # ---------- 升级类问法分流：车机版本 vs 模块固件 OTA ----------
+        # 事故句：问车机要不要升级到门槛版本，不能被 OTA 规则抢走
+        s, j = call_json(guest, "POST", A + "/api/chat/send",
+                         {"session_id": SID3, "text": "我的车是2021款的，能装吗，要不要先升级系统"})
+        auto = (j.get("auto_reply") or {}).get("text", "")
+        check("car upgrade hits version rule", s == 201 and "车机软件需要" in auto
+              and "2026.20" in auto and "后续升级只能用 OTA 包" not in auto, auto[:40])
+        # 明确问固件升级 → OTA 文案
+        s, j = call_json(guest, "POST", A + "/api/chat/send",
+                         {"session_id": SID3, "text": "固件怎么升级"})
+        auto = (j.get("auto_reply") or {}).get("text", "")
+        check("firmware upgrade hits OTA", s == 201 and "后续升级只能用 OTA 包" in auto, auto[:40])
+        # OTA 收费问法 → OTA 文案
+        s, j = call_json(guest, "POST", A + "/api/chat/send",
+                         {"session_id": SID3, "text": "OTA更新要钱吗"})
+        auto = (j.get("auto_reply") or {}).get("text", "")
+        check("OTA cost hits OTA", s == 201 and "后续升级只能用 OTA 包" in auto, auto[:40])
+        # 价格仍命中价格规则
+        s, j = call_json(guest, "POST", A + "/api/chat/send",
+                         {"session_id": SID3, "text": "套件多少钱"})
+        auto = (j.get("auto_reply") or {}).get("text", "")
+        check("price still hits price", s == 201 and "¥399" in auto and "¥699" in auto, auto[:40])
+        # 老版本车机 → 版本门槛文案
+        s, j = call_json(guest, "POST", A + "/api/chat/send",
+                         {"session_id": SID3, "text": "车机版本2025.45能用吗"})
+        auto = (j.get("auto_reply") or {}).get("text", "")
+        check("old car version hits version rule", s == 201 and "2026.20" in auto
+              and "后续升级只能用 OTA 包" not in auto, auto[:40])
+        # 裸「更新」无固件语境 → 不自动回复，等人工
+        s, j = call_json(guest, "POST", A + "/api/chat/send",
+                         {"session_id": SID3, "text": "怎么更新"})
+        check("bare update no auto", s == 201 and j.get("auto_reply") is None, j)
 
         # ---------- poll 边界 ----------
         s, j = call_json(guest, "GET", A + "/api/chat/poll?session_id=unknown-session-99")
