@@ -92,6 +92,12 @@ python3 app.py                    # 默认监听 127.0.0.1:9000
 - `GET /api/admin/orders?status=<履约状态>` → 全部订单（倒序），含**完整电话、微信号、车型与收货地址**（仅后台可见）。
 - `POST /api/admin/order/<order_id>/fulfillment` `{fulfillment_status?, courier?, tracking_no?}` → 改履约状态/快递并刷新 `status_updated_at`；状态非法 400。
 
+### 商城：站内客服（替代原 FormSubmit→Gmail→仓库 JSON 中转，消息直达本站数据库）
+- `POST /api/chat/send` `{session_id, text}` → 存客户消息（201）。`session_id` 前端生成存 localStorage，后端校验 `[A-Za-z0-9_-]{8,64}`；单条文本 ≤ 2000 字；同会话每分钟最多 20 条，超出 429。命中后端 `CHAT_QA` 关键词规则（与原前端问答库逐字一致）时立即以 `sender=agent, kind=auto` 存一条自动回复并在响应 `auto_reply` 里带回；未命中 `auto_reply` 为 null，只存消息等店主人工回复。
+- `GET /api/chat/poll?session_id=&after_id=` → 该会话 id 大于 `after_id` 的全部消息（客户与客服双方），按 id 升序，附 `last_id`。前端每 3 秒增量拉取。
+- 后台（复用 ADMIN_TOKEN 鉴权，未登录 401、未配置 503）：`GET /api/admin/chat/inbox` 会话列表（最后消息预览、最后时间、未读数 = id 大于 `agent_last_read_id` 的客户消息数）；`GET /api/admin/chat/thread/<session_id>` 完整线程，打开即把已读位推进到当前最大客户消息 id；`POST /api/admin/chat/reply` `{session_id, text}` 以 `agent/human` 存店主回复，客户下一次 poll 即收到。
+- 数据表：`chat_sessions`（session_id 主键、first_seen、last_seen、customer_note、agent_last_read_id）、`chat_messages`（id 自增、session_id、sender ∈ customer/agent、kind ∈ human/auto、text、created_at），随 `db_init` 自动建表，无需手工迁移。
+
 ### GET /api/qr?text=
 离线生成 QR 二维码 PNG（字节模式、ECC-M、版本 1–10，纯标准库实现，无任何外部依赖）。前端把微信 Native 的 `code_url` 传进来渲染扫码图。文本 UTF-8 超过 213 字节返回 400。
 
@@ -215,3 +221,8 @@ curl -s -X POST http://127.0.0.1:19090/api/pay/alipay -H 'Content-Type: applicat
 - 老库迁移专项：用旧 schema（无商城列）建库并塞入 1 单 PAID + 1 单 PENDING，新代码启动后列自动补齐、已付款单 fulfillment_status 回填 PAID、待付款单为 AWAITING_PAYMENT，二次启动幂等。
 
 前端（index.html / account.html / admin.html）全部内联脚本经 `node --check` 语法校验；三页引用的 /api 路径与后端路由逐条交叉核对一致；新页面零外部资源引用（仅页脚备案链接）。
+
+**第六轮：站内实时客服（2026-11-23，本地离线自测，未调用任何生产接口）**
+
+- `tests/test_chat.py`（32/32）：双服务并行（Server A Flask + ADMIN_TOKEN，Server B 标准库 + 无 ADMIN_TOKEN）。覆盖：send 参数校验（非法/过短 session 400、空文本 400、超 2000 字 400）；关键词命中（「套件多少钱？」→ auto 回复含 ¥399/¥699 全档价格）与未命中（auto_reply 为 null、只存消息）；poll 全量与 after_id 增量、未知会话返回空、非法 session 400；后台三接口未鉴权 401；inbox 未读数 = 2 且预览为最后一条客户消息；打开 thread 后未读清零（已读推进）；后台 reply 后客户 poll 增量收到 kind=human 的店主消息；thread/reply 未知会话 404；Bearer 直通；限频（同会话 20 条放行、第 21 条 429）；Server B：后台聊天接口 503、标准库模式下 send+秒回+poll 正常。
+- 回归：`tests/test_store.py` 50/50、`tests/test_qr.py` 13/13 均无回退；index.html / admin.html 内联脚本 `node --check` 通过；聊天窗已无 FormSubmit 与仓库 `chat/*.json` 依赖（留言表单 kfForm 仍走 FormSubmit，不在本次范围）。

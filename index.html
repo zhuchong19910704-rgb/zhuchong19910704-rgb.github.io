@@ -749,37 +749,7 @@
   document.getElementById('kfClose').addEventListener('click', function(){
     kfPanel.classList.remove('open');
   });
-  // ---- smart chat: instant answers, no backend ----
-  var QA = [
-    {k:['满血'], a:'满血与否取决于车自身的 FSD 版本和特斯拉的推送进度（市面说的「工厂版」指保留了特定出厂软件的车），和本模块无关。模块对已购 FSD 的车只做红绿灯识别激活和地区限制解锁，不提供 FSD 本体激活，也不承诺满血。'},
-    {k:['价格','多少钱','多少元','价位'], a:'组装套件价格（空白硬件，固件免费下载自刷，OTA 永久免费）：\n老款 Model 3/Y：基础 ¥399 / EAP ¥499 / FSD ¥599\n新款焕新版 / Juniper：基础 ¥499 / EAP ¥599 / FSD ¥699\n硬件是同一套，按车已购的订阅选档。点页面价格区的「立即购买」就能在线下单付款。'},
-    {k:['rev','选包','版本包','刷不上'], a:'固件分 REV1.X 和 REV3.X 两个包，看主板 ESP32-P4 芯片版本选，不通用。买成品按卖家标注；自己买板看芯片丝印，或问板卡卖家。'},
-    {k:['首刷','第一次','刷机','怎么刷','fullflash','整刷'], a:'第一次刷机用 FULLFLASH 整刷包：电脑 Chrome 打开在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选 merged 整刷包从地址 0x0 写入。下载和校验值都在本站下载区。'},
-    {k:['ota','升级','更新'], a:'后续升级只能用 OTA 包：在模块网页仪表盘的固件更新入口上传，过程不要断电。本站 OTA 升级永久免费。注意：千万别拿 FULLFLASH 整刷包当更新包刷，那是已知的模块重启故障原因。'},
-    {k:['重启','闪退','断开','不稳定'], a:'模块自己重启先查两件事：①是不是把整刷包当更新包刷了——重刷对应版本的 OTA 包纠正；②供电是否稳定——12V 转 5V 降压模块输出不足也会这样。还不行就在下方留手机号，客服联系你排查。'},
-    {k:['eap','fsd','没买','订阅'], a:'没买 EAP/FSD 也能用基础功能（脱手提醒解除、持续 AP、实验变道、电池预热等）。但召唤、红绿灯识别（TLSSC）需要车本身已订阅 EAP/FSD 才生效——模块只解锁地区与距离限制，不破解付费功能。'},
-    {k:['召唤','红绿灯','tlssc'], a:'召唤距离放开（±85m）需要车已购 EAP/FSD；红绿灯识别（TLSSC）需要车已购 FSD，模块负责激活和地区解锁，不提供功能本体。'},
-    {k:['接线','破线','安装','x179','针脚'], a:'走后排 X179 诊断接头对插，不用破线。但接线前必须先进车辆服务模式的 CAN Port 页面，逐脚核对针脚对应的总线名称——不同年份线束布局至少有 4 种，不能只按年份猜。详细接线表在本站「安装要点」区。'},
-    {k:['保修','质保'], a:'先说结论：整车还在特斯拉基本保修期内（4 年或 8 万公里，以先到为准）的，建议先别装，等出保后再考虑。安装涉及车辆 CAN 总线操作，特斯拉有可能据此拒绝相关部件甚至整车保修；已出保的车辆也请自行评估风险。'},
-    {k:['版本','2026','能用','适配','车型','model'], a:'适用于 Model 3 / Y，车机软件需要 ≥ 2026.20。低于 2026.20 功能不正常、不能用，请先升级车机。下单前先在车机里确认版本号。'},
-    {k:['下单','购买','支付','付款','发货','怎么买'], a:'下单方式：在本站价格区点对应档位的「立即购买」，填收货地址后用微信扫码或支付宝付款；付款成功后卖家备货发货，进度和快递单号在本站「我的订单」页随时可查。不确定适配先在这里问我，确认了再下单。'},
-    {k:['电话','微信','联系','人工','真人'], a:'店主在线（8:00–23:00）时就在这个对话里直接回复你，约 1 分钟，不用跳出去。想留个联系方式慢慢聊，也可以在下方表单留手机号或微信号，店主会加你。'},
-    {k:['变道','匝道','noa'], a:'高速上自己变道下匝道是 NOA 的活，得车本身买了 EAP 才有——模块只解锁限制，不给功能本体。模块自带的实验变道是基础 AP 下打转向灯辅助变道，定位是非高速场景，别当 NOA 用。'},
-    {k:['饰板','放哪','藏哪','装哪'], a:'可以放饰板里，不用露在外面：P4 方案接后排中央扶手后方的 X179 口，那个口本身就在饰板内；老款车也可以走副驾脚窝中控台侧饰板后的对插口（和加装仪表同一个位置），空腔更大、更好藏。都不用破线。'},
-    {k:['t2','一体板','t-2can','lilygo'], a:'有，T2CAN 是同作者的一体板方案：一块 LilyGO T-2CAN 板集成双路 CAN 和电源，螺丝端子免焊接、12V 直供，比 P4 散件好装好藏。固件 v3.30.3 中文版已在本站固件区免费下载（只适配标准版 H784，FD 版不行）。套件实测中、即将上架，可先在下方表单留言登记。注意：标准 Model 3/Y 只接两路总线，杀手模式和高级 EAP 按接法二选一；它还独有 Model S/X（MCU2）支持。'},
-    {k:['车规','集成','工业级'], a:'分方案说：T2CAN 是一体板，一块板集成双路 CAN 和电源；P4 是散件组装（主板+收发模块+降压）。实话说，两个都不是车规级认证产品——T2 官方定位是工业级 CAN 方案（12–24V 宽压、带隔离），P4 用开发板+工业收发模块，都没拿 AEC-Q100 这类车规认证。车上 12V 环境正常用没问题。'},
-    {k:['咸鱼','转转','担保','平台交易'], a:'闲鱼不走了，走转转平台担保交易，一样有平台担保、验货后再放款。留个手机号或微信，确认车型、车机版本（≥2026.20）和订阅档后，客服帮你安排转转担保下单。'},
-    {k:['你好','您好','在吗','hi','hello'], a:'你好，我是阿童木智能客服。价格、适配、刷机、保修都可以直接问我。'}
-  ];
-  function botAnswer(q){
-    var s = q.toLowerCase();
-    for (var i = 0; i < QA.length; i++){
-      for (var j = 0; j < QA[i].k.length; j++){
-        if (s.indexOf(QA[i].k[j]) !== -1) return QA[i].a;
-      }
-    }
-    return '这个问题我暂时答不上来，别急——你的消息店主能看到，在线时（8:00–23:00）会直接在这里回复你。急的话在下方表单留个手机号，店主电话联系你。也可以换个说法再问我，比如「多少钱」「我的车能用吗」「怎么刷机」。';
-  }
+  // ---- 站内客服：消息走本站 /api/chat，关键词秒回在后端，店主回复 3 秒内到达 ----
   var chatLog = document.getElementById('chatLog'), chatText = document.getElementById('chatText');
   function addMsg(text, cls){
     var d = document.createElement('div');
@@ -787,66 +757,6 @@
     chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight;
     return d;
   }
-  var myMsgCount = 0, leadShown = false;
-  try { leadShown = !!localStorage.getItem('p4chat_lead'); } catch (e) {}
-  function askChat(q){
-    q = (q || '').trim(); if (!q) return;
-    addMsg(q, 'me'); chatText.value = '';
-    relaySend(q);
-    myMsgCount++;
-    var t = addMsg('正在输入…', 'bot');
-    setTimeout(function(){
-      t.textContent = botAnswer(q); chatLog.scrollTop = chatLog.scrollHeight;
-      if (myMsgCount === 2 && !leadShown) {
-        leadShown = true;
-        try { localStorage.setItem('p4chat_lead', '1'); } catch (e) {}
-        addMsg('想直接跟店主一对一聊？在下方表单留个微信号或手机号，店主加你——确认适配、下单、刷机指导都能直接对接，不用在这儿等。', 'bot');
-      }
-    }, 450);
-  }
-  document.getElementById('chatSend').addEventListener('click', function(){ askChat(chatText.value); });
-  chatText.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); askChat(chatText.value); } });
-  document.querySelectorAll('.qc').forEach(function(b){ b.addEventListener('click', function(){ askChat(b.textContent); }); });
-
-  // ---- live relay: customer messages reach the owner; owner replies appear here ----
-  var sid = null;
-  try { sid = localStorage.getItem('p4chat_sid'); } catch (e) {}
-  if (!sid) {
-    sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('s' + Date.now() + Math.random().toString(36).slice(2, 10));
-    try { localStorage.setItem('p4chat_sid', sid); } catch (e) {}
-  }
-  var relayFailed = false;
-  function postFail(text, attempt){
-    if (attempt < 1) { setTimeout(function(){ postChat(text, attempt + 1); }, 4000); return; }
-    if (!relayFailed) {
-      relayFailed = true;
-      addMsg('（这条好像没发出去，网络不太稳。你先在下方表单留个微信号或手机号，店主会直接联系你。）', 'bot');
-    }
-  }
-  function relaySend(text){
-    postChat(text, 0);
-  }
-  function postChat(text, attempt){
-    fetch('https://formsubmit.co/ajax/b0ef0f17851c76891649d7ab453f25a5', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-      keepalive: true,
-      body: JSON.stringify({
-        _subject: '888ai.me 在线聊天',
-        _template: 'table',
-        _captcha: 'false',
-        '会话ID': sid,
-        '消息内容': text,
-        '页面': location.href
-      })
-    }).then(function(r){
-      if (!r.ok) postFail(text, attempt);
-    }).catch(function(){
-      postFail(text, attempt);
-    });
-  }
-  var seenTs = 0;
-  try { seenTs = Number(localStorage.getItem('p4chat_seen_' + sid) || 0); } catch (e) {}
   function addAgentMsg(m){
     var d = document.createElement('div');
     d.className = 'msg agent';
@@ -855,23 +765,80 @@
     d.appendChild(document.createTextNode(m.text));
     chatLog.appendChild(d); chatLog.scrollTop = chatLog.scrollHeight;
   }
-  function pollReplies(){
-    fetch('https://raw.githubusercontent.com/zhuchong19910704-rgb/zhuchong19910704-rgb.github.io/main/chat/' + sid + '.json?t=' + Date.now(), {cache: 'no-store'})
-      .then(function(r){ if (!r.ok) throw 0; return r.json(); })
+  // 会话 ID：沿用既有 localStorage 键，同一访客始终进同一会话
+  var sid = null;
+  try { sid = localStorage.getItem('p4chat_sid'); } catch (e) {}
+  if (!sid) {
+    sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('s' + Date.now() + Math.random().toString(36).slice(2, 10));
+    try { localStorage.setItem('p4chat_sid', sid); } catch (e) {}
+  }
+  var lastMsgId = 0, renderedIds = {};
+  function renderMsg(m){
+    if (!m || renderedIds[m.id]) return;
+    renderedIds[m.id] = true;
+    if (m.id > lastMsgId) lastMsgId = m.id;
+    if (m.sender === 'customer') addMsg(m.text, 'me');
+    else if (m.kind === 'auto') addMsg(m.text, 'bot');
+    else addAgentMsg(m);
+  }
+  var myMsgCount = 0, leadShown = false, sendFailed = false;
+  try { leadShown = !!localStorage.getItem('p4chat_lead'); } catch (e) {}
+  function maybeLead(){
+    if (myMsgCount === 2 && !leadShown) {
+      leadShown = true;
+      try { localStorage.setItem('p4chat_lead', '1'); } catch (e) {}
+      addMsg('想直接跟店主一对一聊？在下方表单留个微信号或手机号，店主加你——确认适配、下单、刷机指导都能直接对接，不用在这儿等。', 'bot');
+    }
+  }
+  function askChat(q){
+    q = (q || '').trim(); if (!q) return;
+    chatText.value = '';
+    myMsgCount++;
+    postChat(q, 0);
+  }
+  function postChat(text, attempt){
+    fetch('/api/chat/send', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      keepalive: true,
+      body: JSON.stringify({session_id: sid, text: text})
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(j){ return {status: r.status, j: j}; });
+    }).then(function(res){
+      if (res.status === 201 && res.j.message) {
+        renderMsg(res.j.message);
+        if (res.j.auto_reply) renderMsg(res.j.auto_reply);
+        maybeLead();
+      } else if (res.status === 429) {
+        addMsg('（发送太频繁了，请稍等一分钟再发。）', 'bot');
+      } else {
+        postFail(text, attempt);
+      }
+    }).catch(function(){ postFail(text, attempt); });
+  }
+  function postFail(text, attempt){
+    if (attempt < 1) { setTimeout(function(){ postChat(text, attempt + 1); }, 3000); return; }
+    if (!sendFailed) {
+      sendFailed = true;
+      addMsg('（这条好像没发出去，网络不太稳。你先在下方表单留个微信号或手机号，店主会直接联系你。）', 'bot');
+    }
+  }
+  document.getElementById('chatSend').addEventListener('click', function(){ askChat(chatText.value); });
+  chatText.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); askChat(chatText.value); } });
+  document.querySelectorAll('.qc').forEach(function(b){ b.addEventListener('click', function(){ askChat(b.textContent); }); });
+
+  function pollChat(){
+    fetch('/api/chat/poll?session_id=' + encodeURIComponent(sid) + '&after_id=' + lastMsgId, {cache: 'no-store'})
+      .then(function(r){ return r.json(); })
       .then(function(j){
-        var msgs = (j && j.messages) || [], changed = false;
-        msgs.sort(function(a, b){ return a.ts - b.ts; });
-        for (var i = 0; i < msgs.length; i++){
-          if (msgs[i].from === 'agent' && msgs[i].ts > seenTs) { addAgentMsg(msgs[i]); seenTs = msgs[i].ts; changed = true; }
-        }
-        if (changed) { try { localStorage.setItem('p4chat_seen_' + sid, String(seenTs)); } catch (e) {} }
+        ((j && j.messages) || []).forEach(renderMsg);
       }).catch(function(){});
   }
   var pollStarted = false;
   function startPoll(){
     if (pollStarted) return; pollStarted = true;
-    pollReplies();
-    setInterval(pollReplies, 5000);
+    pollChat();
+    setInterval(pollChat, 3000);
   }
 
   // ---- order buttons: handled by the checkout script below ----

@@ -65,6 +65,25 @@
   .ctrl input{width:170px}
   .ctrl .msg{font-size:13px; color:var(--green)}
   .empty{color:var(--dim); font-size:14px}
+  .chat-row{display:flex; gap:10px; align-items:baseline; padding:11px 4px;
+    border-bottom:1px solid var(--line); cursor:pointer}
+  .chat-row:hover{background:var(--alt)}
+  .chat-row .pv{flex:1; color:var(--ink2); font-size:13.5px; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis}
+  .chat-row .tm{color:var(--dim2); font-size:12px; font-family:var(--mono); flex:none}
+  .badge.unread{background:var(--redtx); color:#fff; border-color:var(--redtx); flex:none}
+  .thread{display:flex; flex-direction:column; gap:8px; max-height:380px;
+    overflow-y:auto; padding:6px 2px}
+  .tm-msg{max-width:85%; padding:8px 11px; border-radius:11px; font-size:13.5px;
+    line-height:1.6; white-space:pre-line; word-break:break-word}
+  .tm-msg.cust{align-self:flex-start; background:var(--alt); border:1px solid var(--line)}
+  .tm-msg.agent{align-self:flex-end; background:var(--ink); color:#fff}
+  .tm-msg.auto{opacity:.75}
+  .tm-msg .who{display:block; font-size:11px; font-weight:700; opacity:.75; margin-bottom:2px}
+  .reply-row{display:flex; gap:8px; margin-top:12px}
+  .reply-row textarea{flex:1; border:1px solid var(--line2); border-radius:8px;
+    padding:9px 11px; font-size:14px; font-family:inherit; resize:vertical; min-height:42px}
+  .reply-row textarea:focus{outline:none; border-color:var(--ink)}
 </style>
 </head>
 <body>
@@ -87,6 +106,27 @@
     </div>
 
     <div id="panel" style="display:none">
+      <div class="card" id="chatCard">
+        <div class="toolbar" style="margin-bottom:8px">
+          <strong style="font-size:16px">客服消息</strong>
+          <span class="note" id="chatCount"></span>
+          <span class="sp"></span>
+          <button type="button" class="btn ghost small" id="chatRefreshBtn">刷新</button>
+        </div>
+        <div id="chatInbox"><p class="empty">加载中…</p></div>
+        <div id="chatThreadWrap" style="display:none">
+          <div class="toolbar" style="margin:12px 0 8px">
+            <button type="button" class="btn ghost small" id="chatBackBtn">← 返回会话列表</button>
+            <span class="note" id="chatThreadTitle"></span>
+          </div>
+          <div class="thread" id="chatThread"></div>
+          <div class="reply-row">
+            <textarea id="chatReplyText" placeholder="输入回复，点「回复」发送"></textarea>
+            <button type="button" class="btn" id="chatReplyBtn">回复</button>
+          </div>
+          <p class="err" id="chatReplyErr"></p>
+        </div>
+      </div>
       <div class="toolbar">
         <select id="statusFilter">
           <option value="">全部状态</option>
@@ -212,7 +252,79 @@
     try { document.execCommand('copy'); } catch (e) {}
     document.body.removeChild(ta);
   }
+  // ---- 客服消息 ----
+  var chatTimer = null, currentChatSid = null;
+  function chatRowHtml(s){
+    var last = s.last_message || {};
+    var badge = s.unread > 0 ? '<span class="badge unread">' + s.unread + ' 条未读</span>' : '';
+    var who = last.sender === 'customer' ? '客户：' : (last.kind === 'auto' ? '智能客服：' : '店主：');
+    return '<div class="chat-row" data-sid="' + esc(s.session_id) + '">' +
+      '<span class="pv">' + (last.text ? esc(who + last.text) : '（暂无消息）') + '</span>' +
+      badge +
+      '<span class="tm">' + esc((s.last_seen || '').replace('T', ' ')) + '</span></div>';
+  }
+  function loadChatInbox(){
+    api('GET', '/api/admin/chat/inbox').then(function(res){
+      if (res.status === 401) { showLogin('会话已过期，请重新登录。'); return; }
+      if (res.status === 503) { el('chatInbox').innerHTML = '<p class="empty">后台未启用。</p>'; return; }
+      var list = (res.j && res.j.sessions) || [];
+      var unreadTotal = list.reduce(function(n, s){ return n + (s.unread || 0); }, 0);
+      el('chatCount').textContent = '共 ' + list.length + ' 个会话' +
+        (unreadTotal ? ' · ' + unreadTotal + ' 条未读' : '');
+      el('chatInbox').innerHTML = list.length ? list.map(chatRowHtml).join('') : '<p class="empty">暂无客服会话。</p>';
+      el('chatInbox').querySelectorAll('[data-sid]').forEach(function(row){
+        row.addEventListener('click', function(){ openChatThread(row.getAttribute('data-sid')); });
+      });
+    }).catch(function(){});
+  }
+  function chatMsgHtml(m){
+    var cls, who;
+    if (m.sender === 'customer') { cls = 'cust'; who = '客户'; }
+    else if (m.kind === 'auto') { cls = 'agent auto'; who = '智能客服（自动回复）'; }
+    else { cls = 'agent'; who = '店主'; }
+    return '<div class="tm-msg ' + cls + '"><span class="who">' + who + ' · ' +
+      esc((m.created_at || '').replace('T', ' ')) + '</span>' + esc(m.text) + '</div>';
+  }
+  function openChatThread(sid){
+    currentChatSid = sid;
+    el('chatReplyErr').textContent = '';
+    api('GET', '/api/admin/chat/thread/' + encodeURIComponent(sid)).then(function(res){
+      if (res.status === 401) { showLogin('会话已过期，请重新登录。'); return; }
+      if (res.status !== 200) { el('chatReplyErr').textContent = '会话加载失败。'; return; }
+      var msgs = (res.j && res.j.messages) || [];
+      el('chatThreadTitle').textContent = '会话 ' + sid.slice(0, 8) + '… · 共 ' + msgs.length + ' 条';
+      el('chatThread').innerHTML = msgs.length ? msgs.map(chatMsgHtml).join('') : '<p class="empty">暂无消息。</p>';
+      el('chatThreadWrap').style.display = '';
+      var box = el('chatThread'); box.scrollTop = box.scrollHeight;
+      loadChatInbox();
+    }).catch(function(){ el('chatReplyErr').textContent = '网络异常。'; });
+  }
+  function sendChatReply(){
+    var text = el('chatReplyText').value.trim();
+    el('chatReplyErr').textContent = '';
+    if (!currentChatSid) return;
+    if (!text) { el('chatReplyErr').textContent = '回复内容不能为空。'; return; }
+    var btn = el('chatReplyBtn'); btn.disabled = true;
+    api('POST', '/api/admin/chat/reply', {session_id: currentChatSid, text: text}).then(function(res){
+      btn.disabled = false;
+      if (res.status === 201) {
+        el('chatReplyText').value = '';
+        openChatThread(currentChatSid);
+      } else if (res.status === 401) { showLogin('会话已过期，请重新登录。'); }
+      else { el('chatReplyErr').textContent = '发送失败，请再试一次。'; }
+    }).catch(function(){ btn.disabled = false; el('chatReplyErr').textContent = '网络异常。'; });
+  }
+  el('chatRefreshBtn').addEventListener('click', loadChatInbox);
+  el('chatBackBtn').addEventListener('click', function(){
+    currentChatSid = null;
+    el('chatThreadWrap').style.display = 'none';
+    loadChatInbox();
+  });
+  el('chatReplyBtn').addEventListener('click', sendChatReply);
+
   function showLogin(msg){
+    if (chatTimer) { clearInterval(chatTimer); chatTimer = null; }
+    currentChatSid = null;
     el('panel').style.display = 'none';
     el('loginCard').style.display = '';
     if (msg) el('loginErr').textContent = msg;
@@ -221,6 +333,9 @@
     el('loginCard').style.display = 'none';
     el('panel').style.display = '';
     loadOrders();
+    loadChatInbox();
+    if (chatTimer) clearInterval(chatTimer);
+    chatTimer = setInterval(loadChatInbox, 15000);
   }
   el('loginBtn').addEventListener('click', function(){
     var token = el('tokenInput').value;

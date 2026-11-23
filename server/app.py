@@ -35,6 +35,11 @@
   GET  /api/admin/orders?status=  全部订单（需后台鉴权，含完整地址）
   POST /api/admin/order/<id>/fulfillment  改履约状态 / 快递（需后台鉴权）
   GET  /api/qr?text=              离线生成 QR 二维码 PNG（微信扫码支付用）
+  POST /api/chat/send             站内客服：客户发消息（命中关键词自动秒回）
+  GET  /api/chat/poll             站内客服：增量拉取会话消息（after_id）
+  GET  /api/admin/chat/inbox      客服收件箱：会话列表 + 未读数（需后台鉴权）
+  GET  /api/admin/chat/thread/<session_id>  会话完整线程（打开即标记已读）
+  POST /api/admin/chat/reply      客服回复（需后台鉴权）
 
 环境变量见 README.md。
 """
@@ -233,6 +238,23 @@ CREATE TABLE IF NOT EXISTS addresses (
     is_default     INTEGER NOT NULL DEFAULT 0,
     created_at     TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    session_id        TEXT PRIMARY KEY,
+    first_seen        TEXT NOT NULL,
+    last_seen         TEXT NOT NULL,
+    customer_note     TEXT DEFAULT '',
+    agent_last_read_id INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    sender     TEXT NOT NULL,
+    kind       TEXT NOT NULL DEFAULT 'human',
+    text       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session
+    ON chat_messages (session_id, id);
 """
 
 # 订单表新增列（与 wechat_transaction_id 相同的 ALTER TABLE 迁移手法）
@@ -1158,6 +1180,303 @@ def handle_qr(query):
     return binary_response(200, "image/png", png)
 
 
+# ---------------------------------------------------------------- 站内客服：关键词秒回规则
+# 与原前端智能问答库逐字一致（从 index.html 的 QA 数组搬移），顺序即匹配优先级：
+# 客户消息转小写后按顺序做子串匹配，命中第一条即以 agent/auto 身份秒回；未命中不自动回复。
+CHAT_QA = [
+    (['满血'], '满血与否取决于车自身的 FSD 版本和特斯拉的推送进度（市面说的「工厂版」指保留了特定出厂软件的车），和本模块无关。模块对已购 FSD 的车只做红绿灯识别激活和地区限制解锁，不提供 FSD 本体激活，也不承诺满血。'),
+    (['价格', '多少钱', '多少元', '价位'], '组装套件价格（空白硬件，固件免费下载自刷，OTA 永久免费）：\n老款 Model 3/Y：基础 ¥399 / EAP ¥499 / FSD ¥599\n新款焕新版 / Juniper：基础 ¥499 / EAP ¥599 / FSD ¥699\n硬件是同一套，按车已购的订阅选档。点页面价格区的「立即购买」就能在线下单付款。'),
+    (['rev', '选包', '版本包', '刷不上'], '固件分 REV1.X 和 REV3.X 两个包，看主板 ESP32-P4 芯片版本选，不通用。买成品按卖家标注；自己买板看芯片丝印，或问板卡卖家。'),
+    (['首刷', '第一次', '刷机', '怎么刷', 'fullflash', '整刷'], '第一次刷机用 FULLFLASH 整刷包：电脑 Chrome 打开在线刷机工具（esp.huhn.me 或 adafruit WebSerial ESPTool），主板 USB 连电脑，选 merged 整刷包从地址 0x0 写入。下载和校验值都在本站下载区。'),
+    (['ota', '升级', '更新'], '后续升级只能用 OTA 包：在模块网页仪表盘的固件更新入口上传，过程不要断电。本站 OTA 升级永久免费。注意：千万别拿 FULLFLASH 整刷包当更新包刷，那是已知的模块重启故障原因。'),
+    (['重启', '闪退', '断开', '不稳定'], '模块自己重启先查两件事：①是不是把整刷包当更新包刷了——重刷对应版本的 OTA 包纠正；②供电是否稳定——12V 转 5V 降压模块输出不足也会这样。还不行就在下方留手机号，客服联系你排查。'),
+    (['eap', 'fsd', '没买', '订阅'], '没买 EAP/FSD 也能用基础功能（脱手提醒解除、持续 AP、实验变道、电池预热等）。但召唤、红绿灯识别（TLSSC）需要车本身已订阅 EAP/FSD 才生效——模块只解锁地区与距离限制，不破解付费功能。'),
+    (['召唤', '红绿灯', 'tlssc'], '召唤距离放开（±85m）需要车已购 EAP/FSD；红绿灯识别（TLSSC）需要车已购 FSD，模块负责激活和地区解锁，不提供功能本体。'),
+    (['接线', '破线', '安装', 'x179', '针脚'], '走后排 X179 诊断接头对插，不用破线。但接线前必须先进车辆服务模式的 CAN Port 页面，逐脚核对针脚对应的总线名称——不同年份线束布局至少有 4 种，不能只按年份猜。详细接线表在本站「安装要点」区。'),
+    (['保修', '质保'], '先说结论：整车还在特斯拉基本保修期内（4 年或 8 万公里，以先到为准）的，建议先别装，等出保后再考虑。安装涉及车辆 CAN 总线操作，特斯拉有可能据此拒绝相关部件甚至整车保修；已出保的车辆也请自行评估风险。'),
+    (['版本', '2026', '能用', '适配', '车型', 'model'], '适用于 Model 3 / Y，车机软件需要 ≥ 2026.20。低于 2026.20 功能不正常、不能用，请先升级车机。下单前先在车机里确认版本号。'),
+    (['下单', '购买', '支付', '付款', '发货', '怎么买'], '下单方式：在本站价格区点对应档位的「立即购买」，填收货地址后用微信扫码或支付宝付款；付款成功后卖家备货发货，进度和快递单号在本站「我的订单」页随时可查。不确定适配先在这里问我，确认了再下单。'),
+    (['电话', '微信', '联系', '人工', '真人'], '店主在线（8:00–23:00）时就在这个对话里直接回复你，约 1 分钟，不用跳出去。想留个联系方式慢慢聊，也可以在下方表单留手机号或微信号，店主会加你。'),
+    (['变道', '匝道', 'noa'], '高速上自己变道下匝道是 NOA 的活，得车本身买了 EAP 才有——模块只解锁限制，不给功能本体。模块自带的实验变道是基础 AP 下打转向灯辅助变道，定位是非高速场景，别当 NOA 用。'),
+    (['饰板', '放哪', '藏哪', '装哪'], '可以放饰板里，不用露在外面：P4 方案接后排中央扶手后方的 X179 口，那个口本身就在饰板内；老款车也可以走副驾脚窝中控台侧饰板后的对插口（和加装仪表同一个位置），空腔更大、更好藏。都不用破线。'),
+    (['t2', '一体板', 't-2can', 'lilygo'], '有，T2CAN 是同作者的一体板方案：一块 LilyGO T-2CAN 板集成双路 CAN 和电源，螺丝端子免焊接、12V 直供，比 P4 散件好装好藏。固件 v3.30.3 中文版已在本站固件区免费下载（只适配标准版 H784，FD 版不行）。套件实测中、即将上架，可先在下方表单留言登记。注意：标准 Model 3/Y 只接两路总线，杀手模式和高级 EAP 按接法二选一；它还独有 Model S/X（MCU2）支持。'),
+    (['车规', '集成', '工业级'], '分方案说：T2CAN 是一体板，一块板集成双路 CAN 和电源；P4 是散件组装（主板+收发模块+降压）。实话说，两个都不是车规级认证产品——T2 官方定位是工业级 CAN 方案（12–24V 宽压、带隔离），P4 用开发板+工业收发模块，都没拿 AEC-Q100 这类车规认证。车上 12V 环境正常用没问题。'),
+    (['咸鱼', '转转', '担保', '平台交易'], '闲鱼不走了，走转转平台担保交易，一样有平台担保、验货后再放款。留个手机号或微信，确认车型、车机版本（≥2026.20）和订阅档后，客服帮你安排转转担保下单。'),
+    (['你好', '您好', '在吗', 'hi', 'hello'], '你好，我是阿童木智能客服。价格、适配、刷机、保修都可以直接问我。'),
+]
+
+
+def chat_auto_answer(text):
+    """命中关键词返回自动回复文案，未命中返回 None。"""
+    s = (text or "").lower()
+    for keywords, answer in CHAT_QA:
+        for kw in keywords:
+            if kw in s:
+                return answer
+    return None
+# ---------------------------------------------------------------- 站内客服：数据层
+CHAT_SESSION_ID_RE = re.compile(r"[A-Za-z0-9_-]{8,64}")
+CHAT_TEXT_MAX = 2000
+CHAT_RATE_LIMIT = 20  # 同一会话每分钟最多 20 条客户消息
+CHAT_RATE_WINDOW_SECONDS = 60
+
+
+def _chat_now():
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def chat_message_view(row):
+    return {
+        "id": row["id"],
+        "session_id": row["session_id"],
+        "sender": row["sender"],
+        "kind": row["kind"],
+        "text": row["text"],
+        "created_at": row["created_at"],
+    }
+
+
+def db_chat_touch_session(session_id):
+    now = _chat_now()
+    with _db_lock, db_connect() as conn:
+        conn.execute(
+            "INSERT INTO chat_sessions (session_id, first_seen, last_seen)"
+            " VALUES (?,?,?)"
+            " ON CONFLICT(session_id) DO UPDATE SET last_seen = excluded.last_seen",
+            (session_id, now, now),
+        )
+
+
+def db_chat_add_message(session_id, sender, kind, text):
+    now = _chat_now()
+    with _db_lock, db_connect() as conn:
+        conn.execute(
+            "INSERT INTO chat_sessions (session_id, first_seen, last_seen)"
+            " VALUES (?,?,?)"
+            " ON CONFLICT(session_id) DO UPDATE SET last_seen = excluded.last_seen",
+            (session_id, now, now),
+        )
+        cur = conn.execute(
+            "INSERT INTO chat_messages (session_id, sender, kind, text, created_at)"
+            " VALUES (?,?,?,?,?)",
+            (session_id, sender, kind, text, now),
+        )
+        row = conn.execute(
+            "SELECT * FROM chat_messages WHERE id = ?", (cur.lastrowid,)
+        ).fetchone()
+    return dict(row)
+
+
+def db_chat_poll(session_id, after_id):
+    with _db_lock, db_connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM chat_messages WHERE session_id = ? AND id > ?"
+            " ORDER BY id ASC",
+            (session_id, after_id),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def db_chat_recent_customer_count(session_id):
+    from datetime import timedelta
+
+    cutoff = (datetime.now() - timedelta(seconds=CHAT_RATE_WINDOW_SECONDS)).isoformat(
+        timespec="seconds"
+    )
+    with _db_lock, db_connect() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) FROM chat_messages"
+            " WHERE session_id = ? AND sender = 'customer' AND created_at >= ?",
+            (session_id, cutoff),
+        ).fetchone()[0]
+
+
+def db_chat_inbox():
+    """会话列表：最后一条消息预览 + 未读数（id 大于 agent_last_read_id 的客户消息）。"""
+    with _db_lock, db_connect() as conn:
+        sessions = conn.execute(
+            "SELECT * FROM chat_sessions ORDER BY last_seen DESC"
+        ).fetchall()
+        out = []
+        for sess in sessions:
+            sid = sess["session_id"]
+            last = conn.execute(
+                "SELECT * FROM chat_messages WHERE session_id = ?"
+                " ORDER BY id DESC LIMIT 1",
+                (sid,),
+            ).fetchone()
+            unread = conn.execute(
+                "SELECT COUNT(*) FROM chat_messages"
+                " WHERE session_id = ? AND sender = 'customer' AND id > ?",
+                (sid, sess["agent_last_read_id"] or 0),
+            ).fetchone()[0]
+            out.append(
+                {
+                    "session_id": sid,
+                    "first_seen": sess["first_seen"],
+                    "last_seen": sess["last_seen"],
+                    "customer_note": sess["customer_note"] or "",
+                    "unread": unread,
+                    "last_message": (
+                        {
+                            "id": last["id"],
+                            "sender": last["sender"],
+                            "kind": last["kind"],
+                            "text": last["text"],
+                            "created_at": last["created_at"],
+                        }
+                        if last
+                        else None
+                    ),
+                }
+            )
+    return out
+
+
+def db_chat_thread(session_id):
+    """完整线程；同时把 agent_last_read_id 推进到当前最大客户消息 id。会话不存在返回 None。"""
+    with _db_lock, db_connect() as conn:
+        sess = conn.execute(
+            "SELECT * FROM chat_sessions WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        if not sess:
+            return None
+        rows = conn.execute(
+            "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY id ASC",
+            (session_id,),
+        ).fetchall()
+        max_customer = conn.execute(
+            "SELECT COALESCE(MAX(id), 0) FROM chat_messages"
+            " WHERE session_id = ? AND sender = 'customer'",
+            (session_id,),
+        ).fetchone()[0]
+        conn.execute(
+            "UPDATE chat_sessions SET agent_last_read_id = ? WHERE session_id = ?",
+            (max_customer, session_id),
+        )
+    return [dict(r) for r in rows]
+
+
+def db_chat_session_exists(session_id):
+    with _db_lock, db_connect() as conn:
+        row = conn.execute(
+            "SELECT session_id FROM chat_sessions WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+    return row is not None
+
+
+# ---------------------------------------------------------------- 站内客服：处理函数
+def _valid_chat_session_id(session_id):
+    return bool(CHAT_SESSION_ID_RE.fullmatch(session_id or ""))
+
+
+def _extract_chat_text(data):
+    text = str((data or {}).get("text", "") or "").strip()
+    if not text:
+        return None, json_response(
+            400, {"error": "text_required", "message": "消息内容不能为空"}
+        )
+    if len(text) > CHAT_TEXT_MAX:
+        return None, json_response(
+            400,
+            {
+                "error": "text_too_long",
+                "message": "单条消息最多 %d 字" % CHAT_TEXT_MAX,
+            },
+        )
+    return text, None
+
+
+def handle_chat_send(data):
+    if not isinstance(data, dict):
+        return json_response(400, {"error": "invalid_json"})
+    session_id = str(data.get("session_id", "") or "").strip()
+    if not _valid_chat_session_id(session_id):
+        return json_response(
+            400, {"error": "invalid_session_id", "message": "会话 ID 不合法"}
+        )
+    text, err = _extract_chat_text(data)
+    if err:
+        return err
+    if db_chat_recent_customer_count(session_id) >= CHAT_RATE_LIMIT:
+        return json_response(
+            429,
+            {"error": "rate_limited", "message": "发送太频繁了，请稍等一分钟再发"},
+        )
+    msg = db_chat_add_message(session_id, "customer", "human", text)
+    auto = None
+    answer = chat_auto_answer(text)
+    if answer:
+        auto_row = db_chat_add_message(session_id, "agent", "auto", answer)
+        auto = chat_message_view(auto_row)
+    log.info("chat msg session=%s id=%s auto=%s", session_id, msg["id"], bool(auto))
+    return json_response(
+        201, {"message": chat_message_view(msg), "auto_reply": auto}
+    )
+
+
+def handle_chat_poll(query):
+    session_id = str((query or {}).get("session_id", "") or "").strip()
+    if not _valid_chat_session_id(session_id):
+        return json_response(400, {"error": "invalid_session_id"})
+    try:
+        after_id = int((query or {}).get("after_id", 0) or 0)
+    except (TypeError, ValueError):
+        after_id = 0
+    msgs = db_chat_poll(session_id, after_id)
+    last_id = msgs[-1]["id"] if msgs else after_id
+    return json_response(
+        200,
+        {"messages": [chat_message_view(m) for m in msgs], "last_id": last_id},
+    )
+
+
+def handle_admin_chat_inbox(headers):
+    guard = _admin_guard(headers)
+    if guard:
+        return guard
+    return json_response(200, {"sessions": db_chat_inbox()})
+
+
+def handle_admin_chat_thread(headers, session_id):
+    guard = _admin_guard(headers)
+    if guard:
+        return guard
+    if not _valid_chat_session_id(session_id):
+        return json_response(400, {"error": "invalid_session_id"})
+    rows = db_chat_thread(session_id)
+    if rows is None:
+        return json_response(404, {"error": "session_not_found"})
+    return json_response(
+        200,
+        {
+            "session_id": session_id,
+            "messages": [chat_message_view(r) for r in rows],
+        },
+    )
+
+
+def handle_admin_chat_reply(data, headers):
+    guard = _admin_guard(headers)
+    if guard:
+        return guard
+    if not isinstance(data, dict):
+        return json_response(400, {"error": "invalid_json"})
+    session_id = str(data.get("session_id", "") or "").strip()
+    if not _valid_chat_session_id(session_id):
+        return json_response(400, {"error": "invalid_session_id"})
+    text, err = _extract_chat_text(data)
+    if err:
+        return err
+    if not db_chat_session_exists(session_id):
+        return json_response(404, {"error": "session_not_found"})
+    msg = db_chat_add_message(session_id, "agent", "human", text)
+    log.info("chat reply session=%s id=%s", session_id, msg["id"])
+    return json_response(201, {"message": chat_message_view(msg)})
+
+
+
 # ---------------------------------------------------------------- 业务处理（框架无关）
 def handle_health():
     return json_response(200, {"ok": True, "service": "p4can-pay"})
@@ -1983,6 +2302,18 @@ def _dispatch_impl(
     # ---- 离线二维码 ----
     if method == "GET" and path == "/api/qr":
         return handle_qr(query)
+    # ---- 站内客服 ----
+    if method == "POST" and path == "/api/chat/send":
+        return handle_chat_send(json_body)
+    if method == "GET" and path == "/api/chat/poll":
+        return handle_chat_poll(query)
+    if method == "GET" and path == "/api/admin/chat/inbox":
+        return handle_admin_chat_inbox(headers)
+    m = re.fullmatch(r"/api/admin/chat/thread/([A-Za-z0-9_-]+)", path or "")
+    if method == "GET" and m:
+        return handle_admin_chat_thread(headers, m.group(1))
+    if method == "POST" and path == "/api/admin/chat/reply":
+        return handle_admin_chat_reply(json_body, headers)
     return json_response(404, {"error": "not_found", "path": path})
 
 
@@ -2074,6 +2405,13 @@ def run_flask():
         methods=["POST"],
     )
     app.add_url_rule("/api/qr", view_func=_handle, methods=["GET"])
+    app.add_url_rule("/api/chat/send", view_func=_handle, methods=["POST"])
+    app.add_url_rule("/api/chat/poll", view_func=_handle, methods=["GET"])
+    app.add_url_rule("/api/admin/chat/inbox", view_func=_handle, methods=["GET"])
+    app.add_url_rule(
+        "/api/admin/chat/thread/<session_id>", view_func=_handle, methods=["GET"]
+    )
+    app.add_url_rule("/api/admin/chat/reply", view_func=_handle, methods=["POST"])
 
     log.info("starting Flask mode on %s:%s (db=%s)", HOST, PORT, DB_PATH)
     app.run(host=HOST, port=PORT, threaded=True)
