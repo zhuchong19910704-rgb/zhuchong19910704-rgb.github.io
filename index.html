@@ -659,7 +659,7 @@
       <button type="button" class="ck-btn wx" id="ckPayWx">微信支付</button>
       <div class="ck-qr" id="ckWxArea" style="display:none">
         <img id="ckWxQr" alt="微信支付二维码">
-        <p class="ck-note">用微信扫一扫付款。付款后本页会自动确认，一般几秒内。</p>
+        <p class="ck-note" id="ckWxTip">用微信扫一扫付款。付款后本页会自动确认，一般几秒内。</p>
       </div>
       <div class="ck-gap"></div>
       <button type="button" class="ck-btn ali" id="ckPayAli">支付宝付款</button>
@@ -1025,15 +1025,20 @@
   });
 
   // ---- 支付 ----
+  var ckIsMobile = /mobile|android|iphone|ipad|ipod/i.test(navigator.userAgent || '');
   ckEl('ckPayWx').addEventListener('click', function(){
     ckEl('ckPayErr').textContent = '';
-    ckApi('POST', '/api/pay/wechat', {order_id: ck.orderId}).then(function(res){
+    var wxBody = {order_id: ck.orderId};
+    // 手机端 H5 支付权限未开通：强制走 Native 扫码，截图后用微信扫一扫从相册付款
+    if (ckIsMobile) wxBody.pay_type = 'native';
+    ckApi('POST', '/api/pay/wechat', wxBody).then(function(res){
       if (res.status !== 200) {
         ckEl('ckPayErr').textContent = (res.j && (res.j.message || res.j.error)) || '微信支付暂时不可用，请用支付宝或联系客服。';
         return;
       }
       if (res.j.pay_type === 'native' && res.j.code_url) {
         ckEl('ckWxQr').src = '/api/qr?text=' + encodeURIComponent(res.j.code_url);
+        if (ckIsMobile) ckEl('ckWxTip').textContent = '手机付款小窍门：先截图保存本页，再打开微信 → 扫一扫 → 相册，选中这张截图即可付款。';
         ckEl('ckWxArea').style.display = '';
       } else if (res.j.h5_url) {
         location.href = res.j.h5_url;

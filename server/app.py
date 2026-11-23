@@ -16,7 +16,7 @@
   POST /api/order                 建单（必填收货人 + 详细地址 + 手机号）
   POST /api/pay/alipay            生成支付宝支付 URL（page/wap 按 UA 选）
   POST /api/pay/notify/alipay     支付宝异步回调（验签后置 PAID）
-  POST /api/pay/wechat            微信下单（Native 扫码 / H5 按 UA 选）
+  POST /api/pay/wechat            微信下单（默认按 UA 选 Native/H5；body.pay_type 可强制 native/h5）
   POST /api/pay/notify/wechat     微信异步回调（验签+解密后置 PAID）
   GET  /api/order/<order_id>      查单（手机号脱敏）
   POST /api/register              买家注册（手机号 + 密码，会话 Cookie）
@@ -2055,6 +2055,13 @@ def handle_wechat_pay(data, user_agent, client_ip):
 
     ua = (user_agent or "").lower()
     is_mobile = any(k in ua for k in ("mobile", "android", "iphone", "ipad"))
+    # 前端可显式指定通道（pay_type=native/h5）：手机端 H5 权限未开通时，
+    # 前端用 pay_type=native 强制走扫码；不传或非法值保持按 UA 选择的默认行为。
+    force_type = str(data.get("pay_type", "")).strip().lower()
+    if force_type == "native":
+        is_mobile = False
+    elif force_type == "h5":
+        is_mobile = True
     payload = {
         "mchid": cfg["mchid"],
         "appid": cfg["appid"],
